@@ -1,0 +1,70 @@
+package uz.tabriko.domain.entity;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+import uz.tabriko.domain.enums.OrderOption;
+
+import java.math.BigDecimal;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
+@Entity
+@Table(name = "creator_profiles")
+@Getter
+@Setter
+public class CreatorProfile {
+
+    @Id
+    @Column(name = "user_id")
+    private UUID userId;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @MapsId
+    @JoinColumn(name = "user_id")
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private Category category;
+
+    @Column(length = 1000)
+    private String bio;
+
+    @Column(name = "avg_rating", precision = 3, scale = 2)
+    private BigDecimal avgRating = BigDecimal.ZERO;
+
+    @Column(name = "rating_count")
+    private int ratingCount = 0;
+
+    @Column(name = "price_from", precision = 12, scale = 2)
+    private BigDecimal priceFrom = BigDecimal.ZERO;
+
+    @Column(name = "delivery_days")
+    private int deliveryDays = 3;
+
+    @Column(name = "is_top")
+    private boolean isTop = false;
+
+    @Column(name = "is_exclusive")
+    private boolean isExclusive = false;
+
+    @Column(name = "is_verified")
+    private boolean isVerified = false;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
+    @Column(name = "accepting", nullable = false)
+    private boolean accepting = true;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+        name = "creator_profile_options",
+        joinColumns = @JoinColumn(name = "creator_id")
+    )
+    @Column(name = "option_name", length = 30)
+    @Enumerated(EnumType.STRING)
+    private Set<OrderOption> options = new HashSet<>();
+}
