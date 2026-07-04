@@ -7,13 +7,14 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.Category;
 import uz.tabriko.domain.entity.CreatorProfile;
+import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
+import uz.tabriko.domain.enums.OrderStatus;
+import uz.tabriko.domain.enums.ReportStatus;
 import uz.tabriko.domain.enums.Role;
 import uz.tabriko.domain.enums.UserStatus;
 import uz.tabriko.dto.request.AddCreatorRequest;
-import uz.tabriko.dto.response.CreatorResponse;
-import uz.tabriko.dto.response.OrderResponse;
-import uz.tabriko.dto.response.PageResponse;
+import uz.tabriko.dto.response.*;
 import uz.tabriko.repository.*;
 
 import java.math.BigDecimal;
@@ -30,6 +31,8 @@ public class AdminService {
     private final CategoryRepository categoryRepo;
     private final OrderRepository orderRepo;
     private final PortfolioItemRepository portfolioRepo;
+    private final ReportRepository reportRepo;
+    private final PlatformSettingsRepository settingsRepo;
     private final UserMapper mapper;
 
     @Transactional
@@ -75,10 +78,107 @@ public class AdminService {
                 .collect(Collectors.toList());
     }
 
+    // Returns a page of all orders; frontend reads .content
     public PageResponse<OrderResponse> getAllOrders(int page, int size) {
         return PageResponse.of(
                 orderRepo.findAllByOrderByCreatedAtDesc(PageRequest.of(page, size)),
                 o -> mapper.toOrderResponse(o, null)
         );
+    }
+
+    // --- Users ---
+
+    public List<AdminUserResponse> getUsers(String search, String statusParam) {
+        String normalizedSearch = (search != null && !search.isBlank()) ? search.trim() : null;
+        String pattern = (normalizedSearch != null) ? "%" + normalizedSearch.toLowerCase() + "%" : null;
+
+        UserStatus status = null;
+        if (statusParam != null && !statusParam.isBlank()) {
+            try {
+                status = UserStatus.valueOf(statusParam.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw ApiException.badRequest("Invalid status: " + statusParam);
+            }
+        }
+
+        return userRepo.findClientsFiltered(normalizedSearch, pattern, status)
+                .stream()
+                .map(this::toAdminUserResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void blockUser(UUID id) {
+        User user = userRepo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("User not found"));
+        if (user.getRole() != Role.CLIENT) {
+            throw ApiException.badRequest("Block/unblock is only allowed for CLIENT users");
+        }
+        user.setStatus(UserStatus.BLOCKED);
+        userRepo.save(user);
+    }
+
+    @Transactional
+    public void unblockUser(UUID id) {
+        User user = userRepo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("User not found"));
+        if (user.getRole() != Role.CLIENT) {
+            throw ApiException.badRequest("Block/unblock is only allowed for CLIENT users");
+        }
+        user.setStatus(UserStatus.ACTIVE);
+        userRepo.save(user);
+    }
+
+    // --- Stats ---
+
+    public AdminStatsResponse getStats() {
+        AdminStatsResponse r = new AdminStatsResponse();
+        r.setRevenue(orderRepo.sumPriceByStatus(OrderStatus.ACCEPTED));
+        r.setActiveCreators(creatorProfileRepo.countActiveCreators(UserStatus.ACTIVE));
+        r.setTotalUsers(userRepo.countByRole(Role.CLIENT));
+        r.setPendingOrders(orderRepo.countByStatus(OrderStatus.PENDING));
+        r.setTotalOrders(orderRepo.count());
+        r.setModerationQueue(reportRepo.countByStatus(ReportStatus.OPEN));
+        return r;
+    }
+
+    // --- Settings ---
+
+    public PlatformSettings getSettings() {
+        PlatformSettingsEntity entity = settingsRepo.findById(1)
+                .orElseGet(() -> settingsRepo.save(new PlatformSettingsEntity()));
+        return toPlatformSettings(entity);
+    }
+
+    @Transactional
+    public PlatformSettings updateSettings(PlatformSettings dto) {
+        PlatformSettingsEntity entity = settingsRepo.findById(1)
+                .orElseGet(PlatformSettingsEntity::new);
+        entity.setId(1);
+        if (dto.getOrdersOpen() != null) entity.setOrdersOpen(dto.getOrdersOpen());
+        if (dto.getMaintenanceMode() != null) entity.setMaintenanceMode(dto.getMaintenanceMode());
+        if (dto.getRegistrationOpen() != null) entity.setRegistrationOpen(dto.getRegistrationOpen());
+        settingsRepo.save(entity);
+        return toPlatformSettings(entity);
+    }
+
+    // --- Helpers ---
+
+    private AdminUserResponse toAdminUserResponse(User u) {
+        AdminUserResponse r = new AdminUserResponse();
+        r.setId(u.getId());
+        r.setName(u.getName());
+        r.setPhone(u.getPhone());
+        r.setStatus(u.getStatus().name().toLowerCase());
+        r.setCreatedAt(u.getCreatedAt());
+        return r;
+    }
+
+    private PlatformSettings toPlatformSettings(PlatformSettingsEntity e) {
+        PlatformSettings r = new PlatformSettings();
+        r.setOrdersOpen(e.isOrdersOpen());
+        r.setMaintenanceMode(e.isMaintenanceMode());
+        r.setRegistrationOpen(e.isRegistrationOpen());
+        return r;
     }
 }

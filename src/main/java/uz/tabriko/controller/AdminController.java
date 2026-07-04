@@ -10,6 +10,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.dto.request.AddCreatorRequest;
+import uz.tabriko.dto.response.PlatformSettings;
 import uz.tabriko.service.AdminService;
 
 import java.util.UUID;
@@ -45,11 +46,61 @@ public class AdminController {
     }
 
     @GetMapping("/orders")
-    @Operation(summary = "List all orders (admin)")
+    @Operation(summary = "List all orders (admin) — returns a page; frontend reads .content")
     public ResponseEntity<BaseResponse<?>> listOrders(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         return ResponseEntity.ok(BaseResponse.ok(adminService.getAllOrders(page, size)));
+    }
+
+    // --- Users ---
+
+    @GetMapping("/users")
+    @Operation(summary = "List CLIENT users with optional search and status filter")
+    public ResponseEntity<BaseResponse<?>> listUsers(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.getUsers(search, status)));
+    }
+
+    @PostMapping("/users/{id}/block")
+    @Operation(summary = "Block a user")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> blockUser(@PathVariable UUID id) {
+        adminService.blockUser(id);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    @PostMapping("/users/{id}/unblock")
+    @Operation(summary = "Unblock a user")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> unblockUser(@PathVariable UUID id) {
+        adminService.unblockUser(id);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    // --- Stats ---
+
+    @GetMapping("/stats")
+    @Operation(summary = "Platform statistics for admin dashboard")
+    public ResponseEntity<BaseResponse<?>> getStats() {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.getStats()));
+    }
+
+    // --- Settings ---
+
+    @GetMapping("/settings")
+    @Operation(summary = "Get platform settings")
+    public ResponseEntity<BaseResponse<?>> getSettings() {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.getSettings()));
+    }
+
+    @PatchMapping("/settings")
+    @Operation(summary = "Update platform settings")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> updateSettings(@RequestBody PlatformSettings dto) {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.updateSettings(dto)));
     }
 }

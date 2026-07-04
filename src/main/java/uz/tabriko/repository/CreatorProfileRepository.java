@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import uz.tabriko.domain.entity.CreatorProfile;
+import uz.tabriko.domain.enums.UserStatus;
 
 import java.util.List;
 import java.util.Optional;
@@ -36,4 +37,8 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
     List<CreatorProfile> findForYou(Pageable pageable);
 
     Optional<CreatorProfile> findByUserId(UUID userId);
+
+    // Admin stats: count creators that are verified AND whose user account is active
+    @Query("SELECT COUNT(cp) FROM CreatorProfile cp WHERE cp.isVerified = true AND cp.user.status = :activeStatus")
+    long countActiveCreators(@Param("activeStatus") UserStatus activeStatus);
 }

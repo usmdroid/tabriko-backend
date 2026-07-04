@@ -38,4 +38,10 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT o FROM Order o WHERE o.id = :id")
     Optional<Order> findByIdForUpdate(@Param("id") UUID id);
+
+    // Admin stats: sum price of orders with a given status (e.g. ACCEPTED = revenue)
+    @Query("SELECT COALESCE(SUM(o.price), 0) FROM Order o WHERE o.status = :status")
+    java.math.BigDecimal sumPriceByStatus(@Param("status") OrderStatus status);
+
+    long countByStatus(OrderStatus status);
 }

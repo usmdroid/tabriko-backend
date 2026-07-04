@@ -14,8 +14,10 @@ public class OrderResponse {
     private UUID id;
     private UUID clientId;
     private String clientName;
+    private String clientPhone;
     private UUID creatorId;
     private String creatorName;
+    private String creatorPhone;
     private OrderType type;
     private OrderOption option;
     private String recipientName;

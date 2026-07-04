@@ -50,6 +50,9 @@ public class UserMapper {
         r.setAccepting(cp.isAccepting());
         r.setOptions(cp.getOptions());
         r.setPortfolio(portfolio.stream().map(this::toPortfolioResponse).collect(Collectors.toList()));
+        r.setPhone(cp.getUser().getPhone());
+        r.setStatus(cp.getUser().getStatus().name().toLowerCase());
+        r.setCreatedAt(cp.getUser().getCreatedAt());
         return r;
     }
 
@@ -94,8 +97,10 @@ public class UserMapper {
         r.setId(o.getId());
         r.setClientId(o.getClient().getId());
         r.setClientName(o.getClient().getName());
+        r.setClientPhone(o.getClient().getPhone());
         r.setCreatorId(o.getCreator().getId());
         r.setCreatorName(o.getCreator().getName());
+        r.setCreatorPhone(o.getCreator().getPhone());
         r.setType(o.getType());
         r.setOption(o.getOption());
         r.setRecipientName(o.getRecipientName());
