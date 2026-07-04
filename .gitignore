@@ -39,3 +39,6 @@ Thumbs.db
 # Misc
 *.class
 hs_err_pid*
+
+# Paperclip commit notes (local only)
+.paperclip-commit.txt

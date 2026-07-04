@@ -1,1 +1,0 @@
-Manual: add CORS config (SecurityConfig http.cors + CorsConfigurationSource bean, app.cors.allowed-origins in application.yml, default Vercel + localhost, env CORS_ALLOWED_ORIGINS override). Fixes admin panel 401 — browser preflight from tabriko-web.vercel.app to Render was rejected with no Access-Control headers.
