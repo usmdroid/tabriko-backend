@@ -23,11 +23,27 @@ public class MockOtpService implements OtpService {
 
     @Override
     public boolean verifyOtp(String phone, String code) {
+        // FIXME: temporary dev bypass — accept the last 4 digits of the phone number
+        // as a valid OTP for ANY phone. Remove before production.
+        String lastFour = lastFourDigits(phone);
+        if (lastFour != null && lastFour.equals(code)) {
+            store.remove(phone);
+            return true;
+        }
+
         String stored = store.get(phone);
         if (DEV_OTP.equals(code) || DEV_OTP.equals(stored)) {
             store.remove(phone);
             return true;
         }
         return false;
+    }
+
+    // FIXME: helper for the dev bypass above — remove together with it.
+    private String lastFourDigits(String phone) {
+        if (phone == null) return null;
+        String digits = phone.replaceAll("\\D", "");
+        if (digits.length() < 4) return null;
+        return digits.substring(digits.length() - 4);
     }
 }

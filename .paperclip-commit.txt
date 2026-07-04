@@ -1,0 +1,1 @@
+Manual: MockOtpService dev bypass — accept the phone's last 4 digits as OTP for any number (marked //FIXME, remove before prod).
