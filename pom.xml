@@ -24,6 +24,7 @@
         <mapstruct.version>1.6.2</mapstruct.version>
         <firebase.version>9.4.1</firebase.version>
         <awssdk.version>2.26.29</awssdk.version>
+        <telegrambots.version>6.9.7.1</telegrambots.version>
     </properties>
 
     <dependencies>
@@ -114,6 +115,13 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>s3</artifactId>
             <version>${awssdk.version}</version>
+        </dependency>
+
+        <!-- Telegram Bot API (webhook mode) -->
+        <dependency>
+            <groupId>org.telegram</groupId>
+            <artifactId>telegrambots</artifactId>
+            <version>${telegrambots.version}</version>
         </dependency>
 
         <!-- Test -->

@@ -12,9 +12,13 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.response.BaseResponse;
+import uz.tabriko.dto.request.UpdateCreatorKycRequest;
 import uz.tabriko.dto.request.UpdateCreatorProfileRequest;
+import uz.tabriko.dto.request.UpdatePayoutRequest;
 import uz.tabriko.dto.request.UpdatePortfolioVisibilityRequest;
-import uz.tabriko.dto.response.CreatorResponse;
+import uz.tabriko.dto.request.UpdateSocialRequest;
+import uz.tabriko.dto.response.CreatorKycResponse;
+import uz.tabriko.dto.response.CreatorSelfProfileResponse;
 import uz.tabriko.dto.response.EarningsResponse;
 import uz.tabriko.dto.response.PortfolioItemResponse;
 import uz.tabriko.security.UserPrincipal;
@@ -34,19 +38,79 @@ public class CreatorController {
 
     @GetMapping("/profile")
     @Operation(summary = "Get own creator profile")
-    public ResponseEntity<BaseResponse<CreatorResponse>> getProfile(
+    public ResponseEntity<BaseResponse<CreatorSelfProfileResponse>> getProfile(
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        return ResponseEntity.ok(BaseResponse.ok(creatorService.getProfile(principal.getUserId())));
+        return ResponseEntity.ok(BaseResponse.ok(creatorService.getSelfProfile(principal.getUserId())));
     }
 
     @PutMapping("/profile")
-    @Operation(summary = "Update creator profile (bio, category, priceFrom, deliveryDays max 3, options, accepting)")
-    public ResponseEntity<BaseResponse<CreatorResponse>> updateProfile(
+    @Operation(summary = "Update creator profile (bio, category, priceFrom, deliveryDays, options, accepting)")
+    public ResponseEntity<BaseResponse<CreatorSelfProfileResponse>> updateProfile(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody UpdateCreatorProfileRequest req
     ) {
         return ResponseEntity.ok(BaseResponse.ok(creatorService.updateProfile(principal.getUserId(), req)));
+    }
+
+    @PutMapping(value = "/kyc/identity", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Submit ID document number and optional file")
+    public ResponseEntity<BaseResponse<CreatorSelfProfileResponse>> updateKycIdentity(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam String idNumber,
+            @RequestParam(required = false) MultipartFile file
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(
+                creatorService.updateKycIdentity(principal.getUserId(), idNumber, file)));
+    }
+
+    @PutMapping("/payout")
+    @Operation(summary = "Set payout card or account details")
+    public ResponseEntity<BaseResponse<CreatorSelfProfileResponse>> updatePayout(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody UpdatePayoutRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(
+                creatorService.updatePayout(principal.getUserId(), req)));
+    }
+
+    @PutMapping("/social")
+    @Operation(summary = "Set social links (telegram, instagram)")
+    public ResponseEntity<BaseResponse<CreatorSelfProfileResponse>> updateSocial(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody UpdateSocialRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(
+                creatorService.updateSocial(principal.getUserId(), req)));
+    }
+
+    // --- KYC (contract endpoints) ---
+
+    @GetMapping("/kyc")
+    @Operation(summary = "Get own KYC data (masked passportNumber and paymentCardNumber)")
+    public ResponseEntity<BaseResponse<CreatorKycResponse>> getKyc(
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(creatorService.getKyc(principal.getUserId())));
+    }
+
+    @PutMapping("/kyc")
+    @Operation(summary = "Update KYC data (passportNumber, passportFileUrl, paymentCardNumber, paymentHolderName, telegram, instagram)")
+    public ResponseEntity<BaseResponse<CreatorKycResponse>> updateKyc(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestBody UpdateCreatorKycRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(creatorService.updateKyc(principal.getUserId(), req)));
+    }
+
+    @PostMapping(value = "/kyc/passport-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload passport file; returns stored file url in passportFileUrl")
+    public ResponseEntity<BaseResponse<CreatorKycResponse>> uploadPassportFile(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(BaseResponse.created(creatorService.uploadPassportFile(principal.getUserId(), file)));
     }
 
     @GetMapping("/portfolio")

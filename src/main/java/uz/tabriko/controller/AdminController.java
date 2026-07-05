@@ -10,6 +10,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.dto.request.AddCreatorRequest;
+import uz.tabriko.dto.request.FlagCreatorRequest;
 import uz.tabriko.dto.response.PlatformSettings;
 import uz.tabriko.service.AdminService;
 
@@ -45,6 +46,16 @@ public class AdminController {
         return ResponseEntity.ok(BaseResponse.ok(adminService.verifyCreator(id)));
     }
 
+    @PostMapping("/creators/{id}/flag")
+    @Operation(summary = "Set a promotion flag on a creator (top or exclusive)")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> flagCreator(
+            @PathVariable UUID id,
+            @Valid @RequestBody FlagCreatorRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.flagCreator(id, req.getFlag())));
+    }
+
     @GetMapping("/orders")
     @Operation(summary = "List all orders (admin) — returns a page; frontend reads .content")
     public ResponseEntity<BaseResponse<?>> listOrders(
@@ -52,6 +63,14 @@ public class AdminController {
             @RequestParam(defaultValue = "20") int size
     ) {
         return ResponseEntity.ok(BaseResponse.ok(adminService.getAllOrders(page, size)));
+    }
+
+    @PostMapping("/orders/{id}/refund")
+    @Operation(summary = "Admin refund an order (sets status REFUNDED and refunds client)")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> refundOrder(@PathVariable UUID id) {
+        adminService.refundOrder(id);
+        return ResponseEntity.ok(BaseResponse.ok());
     }
 
     // --- Users ---

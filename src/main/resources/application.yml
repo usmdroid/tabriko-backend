@@ -60,6 +60,10 @@ app:
   firebase:
     credentials-path: ${FIREBASE_CREDENTIALS_PATH:}  # empty = mock mode
 
+  telegram:
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    webhook-secret: ${TELEGRAM_WEBHOOK_SECRET:}
+
 springdoc:
   api-docs:
     path: /v3/api-docs

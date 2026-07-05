@@ -7,14 +7,20 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.Category;
 import uz.tabriko.domain.entity.CreatorProfile;
+import uz.tabriko.domain.entity.Order;
 import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
+import uz.tabriko.domain.entity.WalletTransaction;
+import uz.tabriko.domain.enums.NotificationType;
 import uz.tabriko.domain.enums.OrderStatus;
 import uz.tabriko.domain.enums.ReportStatus;
 import uz.tabriko.domain.enums.Role;
+import uz.tabriko.domain.enums.TransactionStatus;
+import uz.tabriko.domain.enums.TransactionType;
 import uz.tabriko.domain.enums.UserStatus;
 import uz.tabriko.dto.request.AddCreatorRequest;
 import uz.tabriko.dto.response.*;
+import uz.tabriko.infrastructure.payment.PaymentGateway;
 import uz.tabriko.repository.*;
 
 import java.math.BigDecimal;
@@ -33,6 +39,9 @@ public class AdminService {
     private final PortfolioItemRepository portfolioRepo;
     private final ReportRepository reportRepo;
     private final PlatformSettingsRepository settingsRepo;
+    private final WalletTransactionRepository walletTxRepo;
+    private final PaymentGateway paymentGateway;
+    private final NotificationService notificationService;
     private final UserMapper mapper;
 
     @Transactional
@@ -58,6 +67,7 @@ public class AdminService {
         cp.setPriceFrom(req.getPriceFrom() != null ? req.getPriceFrom() : BigDecimal.ZERO);
         cp.setDeliveryDays(req.getDeliveryDays());
         cp.setVerified(false);
+        cp.setTier(req.getTier() != null ? req.getTier() : uz.tabriko.domain.enums.CreatorTier.STANDARD);
         creatorProfileRepo.save(cp);
 
         return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(user.getId()));
@@ -160,6 +170,51 @@ public class AdminService {
         if (dto.getRegistrationOpen() != null) entity.setRegistrationOpen(dto.getRegistrationOpen());
         settingsRepo.save(entity);
         return toPlatformSettings(entity);
+    }
+
+    // --- Creator flags ---
+
+    @Transactional
+    public CreatorResponse flagCreator(UUID creatorId, String flag) {
+        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
+                .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        switch (flag.toLowerCase()) {
+            case "top" -> cp.setTop(true);
+            case "exclusive" -> cp.setExclusive(true);
+            default -> throw ApiException.badRequest("Invalid flag: " + flag + ". Allowed: top, exclusive");
+        }
+        creatorProfileRepo.save(cp);
+        return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(creatorId));
+    }
+
+    // --- Order refund ---
+
+    @Transactional
+    public void refundOrder(UUID orderId) {
+        Order order = orderRepo.findByIdForUpdate(orderId)
+                .orElseThrow(() -> ApiException.notFound("Order not found"));
+        if (order.getStatus() == OrderStatus.REFUNDED || order.getStatus() == OrderStatus.REJECTED) {
+            throw ApiException.badRequest("Order is already " + order.getStatus().name().toLowerCase());
+        }
+        order.setStatus(OrderStatus.REFUNDED);
+        orderRepo.save(order);
+
+        paymentGateway.refund(order.getClient().getId(), order.getPrice(), orderId);
+
+        WalletTransaction tx = new WalletTransaction();
+        tx.setUser(order.getClient());
+        tx.setAmount(order.getPrice());
+        tx.setType(TransactionType.REFUND);
+        tx.setOrder(order);
+        tx.setStatus(TransactionStatus.COMPLETED);
+        walletTxRepo.save(tx);
+
+        notificationService.sendNotification(
+                order.getClient().getId(),
+                "Order refunded",
+                "Your order has been refunded by the admin.",
+                NotificationType.ORDER_REFUNDED
+        );
     }
 
     // --- Helpers ---

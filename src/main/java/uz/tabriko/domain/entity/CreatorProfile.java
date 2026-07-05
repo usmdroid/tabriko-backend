@@ -3,6 +3,7 @@ package uz.tabriko.domain.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import uz.tabriko.domain.enums.CreatorTier;
 import uz.tabriko.domain.enums.OrderOption;
 
 import java.math.BigDecimal;
@@ -58,6 +59,34 @@ public class CreatorProfile {
 
     @Column(name = "accepting", nullable = false)
     private boolean accepting = true;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tier", length = 20, nullable = false)
+    private CreatorTier tier = CreatorTier.STANDARD;
+
+    @Column(name = "id_document_number")
+    private String idDocumentNumber;
+
+    @Column(name = "id_document_url", length = 500)
+    private String idDocumentUrl;
+
+    @Column(name = "payout_card")
+    private String payoutCard;
+
+    @Column(name = "payout_account")
+    private String payoutAccount;
+
+    @Column(name = "payout_holder")
+    private String payoutHolder;
+
+    @Column(name = "social_telegram")
+    private String socialTelegram;
+
+    @Column(name = "social_instagram")
+    private String socialInstagram;
+
+    @Column(name = "profile_complete", nullable = false)
+    private boolean profileComplete = false;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(

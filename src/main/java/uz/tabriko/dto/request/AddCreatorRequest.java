@@ -5,6 +5,8 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
+import uz.tabriko.domain.enums.CreatorTier;
+
 import java.math.BigDecimal;
 
 @Data
@@ -24,4 +26,6 @@ public class AddCreatorRequest {
     private BigDecimal priceFrom;
 
     private int deliveryDays = 3;
+
+    private CreatorTier tier = CreatorTier.STANDARD;
 }

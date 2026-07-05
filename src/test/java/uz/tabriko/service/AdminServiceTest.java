@@ -8,12 +8,16 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uz.tabriko.common.exception.ApiException;
+import uz.tabriko.domain.entity.Category;
+import uz.tabriko.domain.entity.CreatorProfile;
 import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
+import uz.tabriko.domain.enums.CreatorTier;
 import uz.tabriko.domain.enums.OrderStatus;
 import uz.tabriko.domain.enums.ReportStatus;
 import uz.tabriko.domain.enums.Role;
 import uz.tabriko.domain.enums.UserStatus;
+import uz.tabriko.dto.request.AddCreatorRequest;
 import uz.tabriko.dto.response.AdminStatsResponse;
 import uz.tabriko.dto.response.AdminUserResponse;
 import uz.tabriko.dto.response.PlatformSettings;
@@ -57,6 +61,39 @@ class AdminServiceTest {
         clientUser.setPhone("+998901234567");
         clientUser.setRole(Role.CLIENT);
         clientUser.setStatus(UserStatus.ACTIVE);
+    }
+
+    // ===== POST /admin/creators — addCreator stores tier =====
+
+    @Test
+    void addCreator_setsTier() {
+        UUID creatorUserId = UUID.randomUUID();
+
+        when(userRepo.findByPhone("+998901234567")).thenReturn(Optional.empty());
+        when(userRepo.save(any(User.class))).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            if (u.getId() == null) u.setId(creatorUserId);
+            return u;
+        });
+
+        Category cat = new Category();
+        cat.setId(1L);
+        when(categoryRepo.findById(1L)).thenReturn(Optional.of(cat));
+        when(creatorProfileRepo.findByUserId(any())).thenReturn(Optional.empty());
+        when(creatorProfileRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(portfolioRepo.findPublicWithConsent(any())).thenReturn(List.of());
+
+        AddCreatorRequest req = new AddCreatorRequest();
+        req.setPhone("+998901234567");
+        req.setName("Star Creator");
+        req.setCategoryId(1L);
+        req.setTier(CreatorTier.TOP);
+
+        adminService.addCreator(req);
+
+        ArgumentCaptor<CreatorProfile> cpCap = ArgumentCaptor.forClass(CreatorProfile.class);
+        verify(creatorProfileRepo).save(cpCap.capture());
+        assertThat(cpCap.getValue().getTier()).isEqualTo(CreatorTier.TOP);
     }
 
     // ===== GET /admin/users =====

@@ -5,6 +5,7 @@ import uz.tabriko.domain.entity.*;
 import uz.tabriko.dto.response.*;
 import uz.tabriko.domain.enums.TransactionStatus;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -48,12 +49,104 @@ public class UserMapper {
         r.setExclusive(cp.isExclusive());
         r.setVerified(cp.isVerified());
         r.setAccepting(cp.isAccepting());
+        r.setTier(cp.getTier());
         r.setOptions(cp.getOptions());
         r.setPortfolio(portfolio.stream().map(this::toPortfolioResponse).collect(Collectors.toList()));
         r.setPhone(cp.getUser().getPhone());
         r.setStatus(cp.getUser().getStatus().name().toLowerCase());
         r.setCreatedAt(cp.getUser().getCreatedAt());
         return r;
+    }
+
+    public CreatorSelfProfileResponse toCreatorSelfProfileResponse(CreatorProfile cp, List<PortfolioItem> portfolio) {
+        CreatorSelfProfileResponse r = new CreatorSelfProfileResponse();
+        r.setId(cp.getUserId());
+        r.setName(cp.getUser().getName());
+        r.setAvatarUrl(cp.getAvatarUrl());
+        r.setBio(cp.getBio());
+        if (cp.getCategory() != null) {
+            r.setCategory(toCategoryResponse(cp.getCategory()));
+        }
+        r.setAvgRating(cp.getAvgRating());
+        r.setRatingCount(cp.getRatingCount());
+        r.setPriceFrom(cp.getPriceFrom());
+        r.setDeliveryDays(cp.getDeliveryDays());
+        r.setTop(cp.isTop());
+        r.setExclusive(cp.isExclusive());
+        r.setVerified(cp.isVerified());
+        r.setAccepting(cp.isAccepting());
+        r.setTier(cp.getTier());
+        r.setOptions(cp.getOptions());
+        r.setPortfolio(portfolio.stream().map(this::toPortfolioResponse).collect(Collectors.toList()));
+        r.setStatus(cp.getUser().getStatus().name().toLowerCase());
+        r.setCreatedAt(cp.getUser().getCreatedAt());
+
+        boolean hasId = cp.getIdDocumentNumber() != null && !cp.getIdDocumentNumber().isBlank();
+        r.setIdProvided(hasId);
+        if (hasId) {
+            r.setIdDocumentNumberMasked(maskId(cp.getIdDocumentNumber()));
+        }
+        r.setIdDocumentUrl(cp.getIdDocumentUrl());
+
+        boolean hasPayout = (cp.getPayoutCard() != null && !cp.getPayoutCard().isBlank())
+                || (cp.getPayoutAccount() != null && !cp.getPayoutAccount().isBlank());
+        r.setPayoutProvided(hasPayout);
+        if (cp.getPayoutCard() != null && !cp.getPayoutCard().isBlank()) {
+            r.setPayoutCardMasked(maskCard(cp.getPayoutCard()));
+        }
+        if (cp.getPayoutAccount() != null && !cp.getPayoutAccount().isBlank()) {
+            r.setPayoutAccountMasked(maskAccount(cp.getPayoutAccount()));
+        }
+        r.setPayoutHolder(cp.getPayoutHolder());
+
+        r.setSocialTelegram(cp.getSocialTelegram());
+        r.setSocialInstagram(cp.getSocialInstagram());
+
+        List<String> missing = computeMissingItems(cp, portfolio);
+        r.setMissing(missing);
+        r.setProfileComplete(missing.isEmpty());
+
+        return r;
+    }
+
+    public CreatorKycResponse toKycResponse(CreatorProfile cp) {
+        CreatorKycResponse r = new CreatorKycResponse();
+        r.setPassportNumber(maskId(cp.getIdDocumentNumber()));
+        r.setPassportFileUrl(cp.getIdDocumentUrl());
+        r.setPaymentCardNumber(maskCard(cp.getPayoutCard()));
+        r.setPaymentHolderName(cp.getPayoutHolder());
+        r.setTelegram(cp.getSocialTelegram());
+        r.setInstagram(cp.getSocialInstagram());
+        return r;
+    }
+
+    private List<String> computeMissingItems(CreatorProfile cp, List<PortfolioItem> portfolio) {
+        List<String> missing = new ArrayList<>();
+        boolean hasPassport = cp.getIdDocumentNumber() != null && !cp.getIdDocumentNumber().isBlank()
+                && cp.getIdDocumentUrl() != null && !cp.getIdDocumentUrl().isBlank();
+        if (!hasPassport) missing.add("passport");
+        boolean hasPayment = (cp.getPayoutCard() != null && !cp.getPayoutCard().isBlank())
+                || (cp.getPayoutAccount() != null && !cp.getPayoutAccount().isBlank());
+        if (!hasPayment) missing.add("payment");
+        if (portfolio == null || portfolio.isEmpty()) missing.add("portfolio");
+        return missing;
+    }
+
+    private String maskId(String id) {
+        if (id == null || id.length() < 4) return "****";
+        String suffix = id.substring(id.length() - 4);
+        String prefix = "*".repeat(id.length() - 4);
+        return prefix + suffix;
+    }
+
+    private String maskCard(String card) {
+        if (card == null || card.length() < 4) return "****";
+        return "**** **** **** " + card.substring(card.length() - 4);
+    }
+
+    private String maskAccount(String account) {
+        if (account == null || account.length() < 4) return "****";
+        return "****" + account.substring(account.length() - 4);
     }
 
     public PortfolioItemResponse toPortfolioResponse(PortfolioItem item) {
@@ -121,7 +214,6 @@ public class UserMapper {
     public DeliveryResponse toDeliveryResponse(Delivery d) {
         DeliveryResponse r = new DeliveryResponse();
         r.setId(d.getId());
-        // Show clean URL if watermark released, otherwise watermarked
         r.setMediaUrl(d.isWatermarked() ? d.getMediaUrlWatermarked() : d.getMediaUrlClean());
         r.setWatermarked(d.isWatermarked());
         r.setDeliveredAt(d.getDeliveredAt());

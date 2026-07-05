@@ -22,6 +22,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
             WHERE (:categoryId IS NULL OR cp.category.id = :categoryId)
               AND (:search IS NULL OR LOWER(u.name) LIKE :searchPattern)
               AND cp.isVerified = true
+              AND cp.profileComplete = true
             """)
     Page<CreatorProfile> findAllFiltered(
             @Param("categoryId") Long categoryId,
@@ -30,15 +31,14 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
             Pageable pageable
     );
 
-    @Query("SELECT cp FROM CreatorProfile cp WHERE cp.isTop = true AND cp.isVerified = true ORDER BY cp.avgRating DESC")
+    @Query("SELECT cp FROM CreatorProfile cp WHERE cp.isTop = true AND cp.isVerified = true AND cp.profileComplete = true ORDER BY cp.avgRating DESC")
     List<CreatorProfile> findTop10();
 
-    @Query("SELECT cp FROM CreatorProfile cp WHERE cp.isVerified = true ORDER BY cp.ratingCount DESC")
+    @Query("SELECT cp FROM CreatorProfile cp WHERE cp.isVerified = true AND cp.profileComplete = true ORDER BY cp.ratingCount DESC")
     List<CreatorProfile> findForYou(Pageable pageable);
 
     Optional<CreatorProfile> findByUserId(UUID userId);
 
-    // Admin stats: count creators that are verified AND whose user account is active
-    @Query("SELECT COUNT(cp) FROM CreatorProfile cp WHERE cp.isVerified = true AND cp.user.status = :activeStatus")
+    @Query("SELECT COUNT(cp) FROM CreatorProfile cp WHERE cp.isVerified = true AND cp.profileComplete = true AND cp.user.status = :activeStatus")
     long countActiveCreators(@Param("activeStatus") UserStatus activeStatus);
 }

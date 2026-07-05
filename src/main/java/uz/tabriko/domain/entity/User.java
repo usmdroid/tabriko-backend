@@ -36,6 +36,9 @@ public class User {
     @Column(nullable = false, length = 20)
     private UserStatus status = UserStatus.ACTIVE;
 
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
+
     // FCM device token for push notifications
     @Column(name = "fcm_token", length = 500)
     private String fcmToken;

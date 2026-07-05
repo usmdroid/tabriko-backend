@@ -11,10 +11,9 @@ import java.util.Set;
 import java.util.UUID;
 
 @Data
-public class CreatorResponse {
+public class CreatorSelfProfileResponse {
     private UUID id;
     private String name;
-    private String phone;
     private String avatarUrl;
     private String bio;
     private CategoryResponse category;
@@ -26,9 +25,28 @@ public class CreatorResponse {
     private boolean isExclusive;
     private boolean isVerified;
     private boolean accepting;
-    private CreatorTier tier;
     private Set<OrderOption> options;
     private List<PortfolioItemResponse> portfolio;
     private String status;
     private Instant createdAt;
+    private CreatorTier tier;
+
+    // KYC (masked — never raw values)
+    private boolean idProvided;
+    private String idDocumentNumberMasked;
+    private String idDocumentUrl;
+
+    // Payout (masked)
+    private boolean payoutProvided;
+    private String payoutCardMasked;
+    private String payoutAccountMasked;
+    private String payoutHolder;
+
+    // Social
+    private String socialTelegram;
+    private String socialInstagram;
+
+    // Completeness gate
+    private boolean profileComplete;
+    private List<String> missing;
 }

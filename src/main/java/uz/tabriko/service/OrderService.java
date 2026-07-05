@@ -110,6 +110,12 @@ public class OrderService {
 
     @Transactional
     public OrderResponse deliverOrder(UUID creatorId, UUID orderId, DeliverOrderRequest req) {
+        CreatorProfile creatorProfile = creatorProfileRepo.findByUserId(creatorId)
+                .orElseThrow(() -> ApiException.notFound("Creator profile not found"));
+        if (!creatorProfile.isProfileComplete()) {
+            throw ApiException.conflict("CREATOR_PROFILE_INCOMPLETE");
+        }
+
         Order order = orderRepo.findById(orderId)
                 .orElseThrow(() -> ApiException.notFound("Order not found"));
         if (!order.getCreator().getId().equals(creatorId)) {

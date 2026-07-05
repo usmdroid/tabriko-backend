@@ -14,6 +14,8 @@ public interface PortfolioItemRepository extends JpaRepository<PortfolioItem, Lo
 
     List<PortfolioItem> findByCreatorId(UUID creatorId);
 
+    long countByCreatorId(UUID creatorId);
+
     // Public items: either not linked to an order, or linked to an order with client consent
     @Query("SELECT p FROM PortfolioItem p WHERE p.creator.id = :creatorId AND p.isPublic = true " +
            "AND (p.order IS NULL OR p.order.portfolioConsent = true)")

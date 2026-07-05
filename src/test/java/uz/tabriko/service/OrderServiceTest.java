@@ -12,6 +12,7 @@ import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.*;
 import uz.tabriko.domain.enums.*;
 import uz.tabriko.dto.request.CreateOrderRequest;
+import uz.tabriko.dto.request.DeliverOrderRequest;
 import uz.tabriko.dto.request.RejectOrderRequest;
 import uz.tabriko.dto.response.OrderResponse;
 import uz.tabriko.infrastructure.media.MediaStorageService;
@@ -110,6 +111,24 @@ class OrderServiceTest {
         assertThat(holdTx.getType()).isEqualTo(TransactionType.HOLD);
         assertThat(holdTx.getAmount()).isEqualByComparingTo("100.00");
         assertThat(holdTx.getStatus()).isEqualTo(TransactionStatus.COMPLETED);
+    }
+
+    // ===== DELIVER ORDER — gate: profileComplete required =====
+
+    @Test
+    void deliverOrder_blockedWhenProfileIncomplete() {
+        CreatorProfile profile = new CreatorProfile();
+        profile.setUser(creator);
+        profile.setProfileComplete(false);
+
+        DeliverOrderRequest req = new DeliverOrderRequest();
+        req.setMediaUrl("https://cdn/video.mp4");
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(profile));
+
+        assertThatThrownBy(() -> orderService.deliverOrder(creatorId, orderId, req))
+            .isInstanceOf(ApiException.class)
+            .hasMessageContaining("CREATOR_PROFILE_INCOMPLETE");
     }
 
     // ===== ACCEPT ORDER — creator gets 85%, no extra client COMMISSION debit =====

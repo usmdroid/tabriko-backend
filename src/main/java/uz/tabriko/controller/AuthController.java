@@ -7,9 +7,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import uz.tabriko.common.response.BaseResponse;
+import uz.tabriko.dto.request.LoginRequest;
 import uz.tabriko.dto.request.RefreshTokenRequest;
+import uz.tabriko.dto.request.RegisterRequest;
+import uz.tabriko.dto.request.ResetPasswordRequest;
 import uz.tabriko.dto.request.SendOtpRequest;
-import uz.tabriko.dto.request.VerifyOtpRequest;
 import uz.tabriko.service.AuthService;
 
 @RestController
@@ -21,16 +23,28 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/send-otp")
-    @Operation(summary = "Send OTP to phone")
+    @Operation(summary = "Send OTP to phone (used for register and reset-password)")
     public ResponseEntity<BaseResponse<Void>> sendOtp(@Valid @RequestBody SendOtpRequest req) {
         authService.sendOtp(req);
         return ResponseEntity.ok(BaseResponse.ok());
     }
 
-    @PostMapping("/verify-otp")
-    @Operation(summary = "Verify OTP and get tokens")
-    public ResponseEntity<BaseResponse<?>> verifyOtp(@Valid @RequestBody VerifyOtpRequest req) {
-        return ResponseEntity.ok(BaseResponse.ok(authService.verifyOtp(req)));
+    @PostMapping("/register")
+    @Operation(summary = "Register new client with phone, OTP, and password")
+    public ResponseEntity<BaseResponse<?>> register(@Valid @RequestBody RegisterRequest req) {
+        return ResponseEntity.ok(BaseResponse.ok(authService.register(req)));
+    }
+
+    @PostMapping("/login")
+    @Operation(summary = "Login with phone and password")
+    public ResponseEntity<BaseResponse<?>> login(@Valid @RequestBody LoginRequest req) {
+        return ResponseEntity.ok(BaseResponse.ok(authService.login(req)));
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Reset (or set first) password using OTP")
+    public ResponseEntity<BaseResponse<?>> resetPassword(@Valid @RequestBody ResetPasswordRequest req) {
+        return ResponseEntity.ok(BaseResponse.ok(authService.resetPassword(req)));
     }
 
     @PostMapping("/refresh")
