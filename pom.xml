@@ -122,6 +122,15 @@
             <groupId>org.telegram</groupId>
             <artifactId>telegrambots</artifactId>
             <version>${telegrambots.version}</version>
+            <exclusions>
+                <!-- Pulls the legacy javax.xml.bind JAXB module; on Spring Boot 3
+                     (jakarta) it triggers NoClassDefFoundError: javax/xml/bind/annotation/XmlElement
+                     at startup. We don't use JAXB annotations. -->
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.module</groupId>
+                    <artifactId>jackson-module-jaxb-annotations</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Test -->
