@@ -27,6 +27,7 @@ import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.repository.*;
 import uz.tabriko.security.UserPrincipal;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
+import uz.tabriko.telegram.service.TelegramBotService;
 
 import java.security.SecureRandom;
 import java.time.Instant;
@@ -63,6 +64,7 @@ public class ApplicationService {
     private final UserRepository userRepo;
     private final CreatorProfileRepository creatorProfileRepo;
     private final TelegramVerificationRepository telegramVerificationRepo;
+    private final TelegramBotService telegramBotService;
     private final MediaStorageService mediaStorage;
 
     private final SecureRandom secureRandom = new SecureRandom();
@@ -259,6 +261,9 @@ public class ApplicationService {
         msg.setText(req.getMessage());
         msg.setCreatedAt(Instant.now());
         messageRepo.save(msg);
+
+        // Deliver the request to the applicant via the Telegram bot (best-effort).
+        telegramBotService.notifyApplicant(app.getPhone(), req.getMessage());
     }
 
     @Transactional
@@ -292,6 +297,17 @@ public class ApplicationService {
         msg.setFileUrl(req.getFileUrl());
         msg.setCreatedAt(Instant.now());
         messageRepo.save(msg);
+
+        // Deliver the message to the applicant via the Telegram bot (best-effort).
+        telegramBotService.notifyApplicant(app.getPhone(), req.getText());
+    }
+
+    @Transactional
+    public void deleteApplication(UUID id) {
+        CreatorApplication app = requireApplication(id);
+        // Remove the message thread first (FK application_id is NOT NULL).
+        messageRepo.deleteByApplication(app);
+        applicationRepo.delete(app);
     }
 
     @Transactional

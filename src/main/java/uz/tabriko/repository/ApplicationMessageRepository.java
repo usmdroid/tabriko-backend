@@ -12,4 +12,6 @@ import java.util.UUID;
 public interface ApplicationMessageRepository extends JpaRepository<ApplicationMessage, UUID> {
 
     List<ApplicationMessage> findByApplicationOrderByCreatedAtAsc(CreatorApplication application);
+
+    void deleteByApplication(CreatorApplication application);
 }

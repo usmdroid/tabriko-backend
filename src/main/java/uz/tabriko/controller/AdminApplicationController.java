@@ -94,4 +94,12 @@ public class AdminApplicationController {
         applicationService.approve(id, principal);
         return ResponseEntity.ok(BaseResponse.ok());
     }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Delete an application and its message thread")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> delete(@PathVariable UUID id) {
+        applicationService.deleteApplication(id);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
 }

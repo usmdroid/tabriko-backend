@@ -18,6 +18,10 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import uz.tabriko.domain.entity.ApplicationMessage;
+import uz.tabriko.domain.enums.ApplicationStatus;
+import uz.tabriko.domain.enums.MessageAuthor;
+import uz.tabriko.repository.ApplicationMessageRepository;
 import uz.tabriko.repository.CreatorApplicationRepository;
 import uz.tabriko.telegram.entity.TelegramVerification;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
@@ -34,6 +38,7 @@ public class TelegramBotService {
     private final TelegramBotClient client;
     private final TelegramVerificationRepository repo;
     private final CreatorApplicationRepository applicationRepo;
+    private final ApplicationMessageRepository messageRepo;
 
     @Transactional
     public void handleUpdate(Update update) {
@@ -44,6 +49,8 @@ public class TelegramBotService {
                     handleStart(msg);
                 } else if (msg.hasContact()) {
                     handleContact(msg);
+                } else if (msg.hasText()) {
+                    handleApplicantReply(msg);
                 }
             } else if (update.hasMyChatMember()) {
                 handleMyChatMember(update.getMyChatMember());
@@ -240,6 +247,58 @@ public class TelegramBotService {
                     session.getChatId(), telegramUserId, e);
             }
         }
+    }
+
+    /**
+     * A plain text message from an applicant. If the applicant's phone maps to an
+     * application whose status is INFO_REQUESTED, store the text as their reply in the
+     * application message thread (visible to the admin panel).
+     */
+    private void handleApplicantReply(Message msg) {
+        if (msg.getFrom() == null) return;
+        Long telegramUserId = msg.getFrom().getId();
+        Long chatId = msg.getChatId();
+
+        TelegramVerification session =
+            repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(telegramUserId).orElse(null);
+        if (session == null || session.getPhone() == null) {
+            sendText(chatId, "Avval /start bosib, telefon raqamingizni ulashing.");
+            return;
+        }
+
+        var appOpt = applicationRepo.findFirstByPhoneOrderByCreatedAtDesc(session.getPhone());
+        if (appOpt.isEmpty()) {
+            sendText(chatId, "Bu raqamga tegishli ariza topilmadi.");
+            return;
+        }
+        var app = appOpt.get();
+        if (app.getStatus() != ApplicationStatus.INFO_REQUESTED) {
+            sendText(chatId, "Hozircha javob talab qilinmagan. Rahmat!");
+            return;
+        }
+
+        ApplicationMessage reply = new ApplicationMessage();
+        reply.setApplication(app);
+        reply.setAuthor(MessageAuthor.APPLICANT);
+        reply.setText(msg.getText());
+        reply.setCreatedAt(Instant.now());
+        messageRepo.save(reply);
+
+        sendText(chatId, "Javobingiz qabul qilindi. Rahmat!");
+    }
+
+    /**
+     * Send an admin/moderator message to the applicant's Telegram (if they have verified
+     * their phone via the bot). Best-effort — silently skips if no linked chat exists.
+     */
+    @Transactional(readOnly = true)
+    public void notifyApplicant(String phone, String text) {
+        if (phone == null || text == null) return;
+        repo.findFirstByPhoneOrderByCreatedAtDesc(phone).ifPresent(v -> {
+            if (v.getTelegramUserId() != null) {
+                sendText(v.getTelegramUserId(), "TabrikO admin:\n" + text);
+            }
+        });
     }
 
     private String normalizePhone(String raw) {
