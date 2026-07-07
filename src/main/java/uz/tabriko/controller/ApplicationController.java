@@ -12,6 +12,8 @@ import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.dto.request.ReplyApplicationRequest;
 import uz.tabriko.dto.request.SubmitApplicationRequest;
+import uz.tabriko.dto.request.VerifyPhoneRequest;
+import uz.tabriko.dto.response.IgVerifyPhraseResponse;
 import uz.tabriko.service.ApplicationService;
 
 import java.util.UUID;
@@ -24,11 +26,26 @@ public class ApplicationController {
 
     private final ApplicationService applicationService;
 
+    @PostMapping("/verify-phone")
+    @Operation(summary = "Verify the OTP right away and exchange it for a longer-lived verifyToken " +
+            "used by POST /applications, so the short OTP TTL doesn't expire while the form is filled out")
+    public ResponseEntity<BaseResponse<?>> verifyPhone(@Valid @RequestBody VerifyPhoneRequest req) {
+        return ResponseEntity.ok(BaseResponse.ok(applicationService.verifyPhone(req)));
+    }
+
     @PostMapping
-    @Operation(summary = "Submit a creator application (OTP-verified, no JWT)")
+    @Operation(summary = "Submit a creator application (requires a verifyToken from /verify-phone, no JWT)")
     public ResponseEntity<BaseResponse<?>> submit(@Valid @RequestBody SubmitApplicationRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(BaseResponse.created(applicationService.submit(req)));
+    }
+
+    @GetMapping("/ig-verify-phrase")
+    @Operation(summary = "Get a random Instagram DM verification phrase to show/copy before submitting")
+    public ResponseEntity<BaseResponse<?>> igVerifyPhrase() {
+        IgVerifyPhraseResponse resp = new IgVerifyPhraseResponse();
+        resp.setPhrase(applicationService.randomIgVerifyPhrase());
+        return ResponseEntity.ok(BaseResponse.ok(resp));
     }
 
     @PostMapping(value = "/upload-sample", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

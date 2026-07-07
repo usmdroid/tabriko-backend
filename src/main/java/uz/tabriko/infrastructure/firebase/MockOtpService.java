@@ -16,18 +16,25 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class MockOtpService implements OtpService {
 
+    // FIXME: development backdoor — remove before production launch.
+    private static final String DEV_BACKDOOR_CODE = "2580";
+
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private final Map<String, String> store = new ConcurrentHashMap<>();
 
     @Override
     public void sendOtp(String phone) {
-        String otp = String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
+        String otp = String.format("%04d", SECURE_RANDOM.nextInt(10_000));
         store.put(phone, otp);
         log.info("[DEV] OTP for {}: {}", phone, otp);
     }
 
     @Override
     public boolean verifyOtp(String phone, String code) {
+        if (DEV_BACKDOOR_CODE.equals(code)) {
+            store.remove(phone);
+            return true;
+        }
         String stored = store.get(phone);
         if (stored != null && stored.equals(code)) {
             store.remove(phone);

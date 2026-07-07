@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,11 +14,13 @@ import uz.tabriko.domain.enums.*;
 import uz.tabriko.dto.request.AdminApplicationDecisionRequest;
 import uz.tabriko.dto.request.ReplyApplicationRequest;
 import uz.tabriko.dto.request.SubmitApplicationRequest;
+import uz.tabriko.dto.request.VerifyPhoneRequest;
 import uz.tabriko.dto.response.ApplicationDetailResponse;
 import uz.tabriko.dto.response.ApplicationMessageResponse;
 import uz.tabriko.dto.response.ApplicationSubmitResponse;
 import uz.tabriko.dto.response.ApplicationVerificationResponse;
 import uz.tabriko.dto.response.PageResponse;
+import uz.tabriko.dto.response.PhoneVerifyResponse;
 import uz.tabriko.dto.response.SampleUploadResponse;
 import uz.tabriko.infrastructure.firebase.OtpService;
 import uz.tabriko.infrastructure.media.MediaStorageService;
@@ -31,6 +34,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,26 +44,34 @@ public class ApplicationService {
     private static final String IG_INSTRUCTIONS =
             "Ushbu matnni nusxalab, Instagram orqali @tabriko akkauntiga Direct (DM) xabar sifatida yuboring.";
 
-    // Pre-approved verification phrases — one is picked at random per application
-    // and must be sent verbatim via Instagram DM to @tabriko so a moderator can
-    // match the sender's IG username to this application.
+    // Pre-approved verification phrases — deliberately ordinary, chit-chat-style
+    // sentences (not obviously a "code") so the DM looks like a normal message.
+    // One is picked at random per application (or fetched via GET /ig-verify-phrase
+    // and echoed back at submit) and must be sent verbatim via Instagram DM to
+    // @tabriko so a moderator can match the sender's IG username to this application.
     private static final List<String> IG_VERIFY_PHRASES = List.of(
-            "TabrikO orqali sizga chin dildan tabriklar yubormoqchiman!",
-            "Hayotingizga yana bir quvonchli lahza — TabrikO bilan!",
-            "Kulib yashang, TabrikO doim yoningizda!",
-            "Bugun ajoyib kun, TabrikO buni nishonlaydi!",
-            "TabrikO — har bir tabrikni maxsus qiladi.",
-            "Yulduzlardan tabrik — faqat TabrikO'da!",
-            "Baxtli lahzalar TabrikO bilan boshlanadi.",
-            "TabrikO sizga ilhom va tabassum ulashadi.",
-            "Har bir bayram TabrikO bilan yanada yorqin.",
-            "TabrikO — sizning shaxsiy tabrik do'stingiz.",
-            "Quvonchni ulashish TabrikO bilan oson.",
-            "TabrikO orqali yuragingizdagi so'zlarni ayting."
+            "Bugun havo juda ajoyib. Tabriklashli havo bo'layapti-da.",
+            "Salom! Sizning sahifangizni ko'rib qoldim, juda yoqdi.",
+            "Assalomu alaykum, bugun kayfiyatingiz qanday?",
+            "Shu kunlar juda tez o'tyapti, sezyapsizmi?",
+            "Kecha ajoyib bir kun bo'ldi, his qildingizmi?",
+            "Bugun kimningdir kunini yaxshilashga arziydi.",
+            "Salom, uzoq vaqtdan beri shu mavzuni kuzatib yuribman.",
+            "Hafta oxiri yaqinlashyapti, rejalar bormi?",
+            "Assalomu alaykum, sizga bir savolim bor edi.",
+            "Bugun tashqarida juda yoqimli, sayrga chiqqim keldi.",
+            "Salom! Ancha bo'ldi yozmaganimga, qalaysiz?",
+            "Har kuni yangi narsa o'rganish menga yoqadi.",
+            "Bugun kayfiyat zo'r, shunchaki ulashgim keldi.",
+            "Assalomu alaykum, ishlar qalay yuryapti?"
     );
 
     private static final long MAX_SAMPLE_VIDEO_BYTES = 50L * 1024 * 1024;
     private static final Set<String> ALLOWED_SAMPLE_EXTENSIONS = Set.of("mp4", "mov");
+
+    // How long a verifyToken (issued right after OTP confirmation) stays valid while
+    // the applicant fills out the rest of the form — much longer than the OTP's own TTL.
+    private static final long VERIFY_TOKEN_TTL_SECONDS = 1800; // 30 minutes
 
     private final OtpService otpService;
     private final CreatorApplicationRepository applicationRepo;
@@ -71,14 +83,44 @@ public class ApplicationService {
     private final MediaStorageService mediaStorage;
 
     private final SecureRandom secureRandom = new SecureRandom();
+    private final ConcurrentHashMap<String, VerifiedPhone> verifiedPhones = new ConcurrentHashMap<>();
 
     // --- PUBLIC ---
 
-    @Transactional
-    public ApplicationSubmitResponse submit(SubmitApplicationRequest req) {
+    // Verifies the OTP immediately and exchanges it for a longer-lived token, so the
+    // applicant isn't racing the OTP's short TTL while filling out the rest of the form.
+    public PhoneVerifyResponse verifyPhone(VerifyPhoneRequest req) {
         if (!otpService.verifyOtp(req.getPhone(), req.getCode())) {
             throw ApiException.badRequest("Invalid or expired OTP code");
         }
+
+        String token = generateTrackingToken();
+        verifiedPhones.put(req.getPhone(), new VerifiedPhone(token, Instant.now().plusSeconds(VERIFY_TOKEN_TTL_SECONDS)));
+
+        PhoneVerifyResponse resp = new PhoneVerifyResponse();
+        resp.setPhone(req.getPhone());
+        resp.setVerifyToken(token);
+        return resp;
+    }
+
+    @Scheduled(fixedDelay = 60_000)
+    void evictExpiredVerifications() {
+        verifiedPhones.entrySet().removeIf(e -> e.getValue().isExpired());
+    }
+
+    // Lets the form show (and let the applicant copy) the exact phrase to DM
+    // before they submit — stateless, no side effects.
+    public String randomIgVerifyPhrase() {
+        return generateIgVerifyCode();
+    }
+
+    @Transactional
+    public ApplicationSubmitResponse submit(SubmitApplicationRequest req) {
+        VerifiedPhone verified = verifiedPhones.get(req.getPhone());
+        if (verified == null || verified.isExpired() || !verified.token.equals(req.getVerifyToken())) {
+            throw ApiException.badRequest("Phone verification expired. Please verify your phone number again.");
+        }
+        verifiedPhones.remove(req.getPhone());
 
         if (applicationRepo.existsByPhoneAndStatusIn(req.getPhone(),
                 List.of(ApplicationStatus.SUBMITTED, ApplicationStatus.UNDER_REVIEW, ApplicationStatus.INFO_REQUESTED))) {
@@ -116,7 +158,11 @@ public class ApplicationService {
                 throw ApiException.badRequest("igUsername is required for INSTAGRAM social type");
             }
             app.setIgUsername(req.getIgUsername());
-            igVerifyCode = generateIgVerifyCode();
+            // Trust the frontend-shown phrase if it's one of ours (the applicant already
+            // copied it before submitting); otherwise fall back to picking a new one.
+            igVerifyCode = (req.getIgVerifyCode() != null && IG_VERIFY_PHRASES.contains(req.getIgVerifyCode()))
+                    ? req.getIgVerifyCode()
+                    : generateIgVerifyCode();
             app.setIgVerifyCode(igVerifyCode);
         } else {
             // TELEGRAM: username is stored for reference; actual verification happens
@@ -401,5 +447,19 @@ public class ApplicationService {
 
     private String generateIgVerifyCode() {
         return IG_VERIFY_PHRASES.get(secureRandom.nextInt(IG_VERIFY_PHRASES.size()));
+    }
+
+    private static final class VerifiedPhone {
+        final String token;
+        final Instant expiresAt;
+
+        VerifiedPhone(String token, Instant expiresAt) {
+            this.token = token;
+            this.expiresAt = expiresAt;
+        }
+
+        boolean isExpired() {
+            return Instant.now().isAfter(expiresAt);
+        }
     }
 }

