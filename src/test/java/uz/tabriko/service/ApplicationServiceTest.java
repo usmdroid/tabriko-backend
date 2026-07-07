@@ -20,6 +20,7 @@ import uz.tabriko.repository.CreatorApplicationRepository;
 import uz.tabriko.repository.CreatorProfileRepository;
 import uz.tabriko.repository.UserRepository;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
+import uz.tabriko.telegram.service.TelegramBotService;
 
 import java.util.regex.Pattern;
 
@@ -40,6 +41,7 @@ class ApplicationServiceTest {
     @Mock UserRepository userRepo;
     @Mock CreatorProfileRepository creatorProfileRepo;
     @Mock TelegramVerificationRepository telegramVerificationRepo;
+    @Mock TelegramBotService telegramBotService;
     @Mock MediaStorageService mediaStorage;
 
     ApplicationService applicationService;
@@ -48,7 +50,7 @@ class ApplicationServiceTest {
     void setUp() {
         applicationService = new ApplicationService(
                 otpService, applicationRepo, messageRepo, categoryRepo, userRepo,
-                creatorProfileRepo, telegramVerificationRepo, mediaStorage);
+                creatorProfileRepo, telegramVerificationRepo, telegramBotService, mediaStorage);
     }
 
     // ===== generateIgCode() format/alphabet — exercised indirectly via verifyPhone() =====
