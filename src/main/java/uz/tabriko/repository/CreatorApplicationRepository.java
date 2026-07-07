@@ -16,6 +16,8 @@ public interface CreatorApplicationRepository extends JpaRepository<CreatorAppli
 
     Optional<CreatorApplication> findByIdAndTrackingToken(UUID id, String trackingToken);
 
+    Optional<CreatorApplication> findFirstByPhoneOrderByCreatedAtDesc(String phone);
+
     Page<CreatorApplication> findByStatusOrderByCreatedAtDesc(ApplicationStatus status, Pageable pageable);
 
     Page<CreatorApplication> findAllByOrderByCreatedAtDesc(Pageable pageable);

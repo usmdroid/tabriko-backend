@@ -18,7 +18,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
-import uz.tabriko.repository.UserRepository;
+import uz.tabriko.repository.CreatorApplicationRepository;
 import uz.tabriko.telegram.entity.TelegramVerification;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
 
@@ -33,7 +33,7 @@ public class TelegramBotService {
 
     private final TelegramBotClient client;
     private final TelegramVerificationRepository repo;
-    private final UserRepository userRepository;
+    private final CreatorApplicationRepository applicationRepo;
 
     @Transactional
     public void handleUpdate(Update update) {
@@ -99,9 +99,10 @@ public class TelegramBotService {
         String phone = normalizePhone(msg.getContact().getPhoneNumber());
         session.setPhone(phone);
 
-        var user = userRepository.findByPhone(phone).orElse(null);
-        if (user != null) {
-            session.setUserId(user.getId());
+        // The applicant is not necessarily a registered User yet — match against a
+        // submitted creator application by phone instead.
+        boolean hasApplication = applicationRepo.findFirstByPhoneOrderByCreatedAtDesc(phone).isPresent();
+        if (hasApplication) {
             session.setStatus("PHONE_LINKED");
         } else {
             session.setStatus("FAILED");
@@ -117,7 +118,7 @@ public class TelegramBotService {
                 "2. Bot avtomatik aniqlaydi va sizga xabar yuboradi"
             );
         } else {
-            sendText(chatId, "Bu raqam tizimda topilmadi. Iltimos TabrikOda ro'yxatdan o'ting va qayta urinib ko'ring.");
+            sendText(chatId, "Bu raqamga tegishli ariza topilmadi. Iltimos avval TabrikO saytida creator arizasini topshiring va qayta urinib ko'ring.");
         }
     }
 
@@ -201,10 +202,20 @@ public class TelegramBotService {
             .orElse(null);
         if (session == null || !"CHANNEL_READ".equals(session.getStatus())) return;
 
-        session.setStatus("SUBMITTED");
+        session.setStatus("VERIFIED");
         session.setVerifiedAt(Instant.now());
         session.setUpdatedAt(Instant.now());
         repo.save(session);
+
+        // Link the completed verification to the applicant's submitted application,
+        // so the status page and admin panel reflect it. Matched by phone.
+        if (session.getPhone() != null) {
+            applicationRepo.findFirstByPhoneOrderByCreatedAtDesc(session.getPhone())
+                .ifPresent(app -> {
+                    app.setTelegramVerification(session);
+                    applicationRepo.save(app);
+                });
+        }
 
         try {
             AnswerCallbackQuery answer = new AnswerCallbackQuery();
@@ -214,32 +225,20 @@ public class TelegramBotService {
             log.warn("Failed to answer callback query {}", callbackQuery.getId(), e);
         }
 
-        sendText(telegramUserId, "Tasdiqlandi! Endi kanaldan chiqamiz...");
+        sendText(telegramUserId, "Tasdiqlandi! ✅ Kanal tekshiruvi yakunlandi.");
 
-        if (session.getChatId() == null) {
-            log.warn("chatId is null for session, skipping leaveChat for telegramUserId={}", telegramUserId);
-            session.setStatus("DONE");
-            session.setUpdatedAt(Instant.now());
-            repo.save(session);
-            sendText(telegramUserId, "Tekshiruv yakunlandi. Rahmat!");
-            return;
-        }
-
-        try {
-            LeaveChat leaveChat = new LeaveChat();
-            leaveChat.setChatId(session.getChatId().toString());
-            client.execute(leaveChat);
-
-            session.setStatus("DONE");
-            session.setUpdatedAt(Instant.now());
-            repo.save(session);
-            sendText(telegramUserId, "Tekshiruv yakunlandi, kanaldan chiqdim. Rahmat!");
-        } catch (TelegramApiException e) {
-            log.error("Failed to leave chat {} for telegramUserId={}", session.getChatId(), telegramUserId, e);
-            session.setStatus("FAILED");
-            session.setUpdatedAt(Instant.now());
-            repo.save(session);
-            sendText(telegramUserId, "Kanaldan chiqishda xatolik yuz berdi. Iltimos qayta urinib ko'ring.");
+        // Best-effort cleanup: leave the channel. A failure here must NOT un-verify —
+        // the verification is already saved above.
+        if (session.getChatId() != null) {
+            try {
+                LeaveChat leaveChat = new LeaveChat();
+                leaveChat.setChatId(session.getChatId().toString());
+                client.execute(leaveChat);
+                sendText(telegramUserId, "Kanaldan chiqdim. Rahmat!");
+            } catch (TelegramApiException e) {
+                log.warn("Failed to leave chat {} for telegramUserId={} (verification already saved)",
+                    session.getChatId(), telegramUserId, e);
+            }
         }
     }
 

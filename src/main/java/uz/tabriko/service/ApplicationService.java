@@ -395,6 +395,11 @@ public class ApplicationService {
         if (app.getSocialType() == ApplicationSocialType.TELEGRAM) {
             ApplicationVerificationResponse.TelegramDetail tg = new ApplicationVerificationResponse.TelegramDetail();
             var tv = app.getTelegramVerification();
+            // The bot completes verification AFTER the application is submitted, so the
+            // stored link may be null — fall back to the latest record for this phone.
+            if (tv == null) {
+                tv = telegramVerificationRepo.findFirstByPhoneOrderByCreatedAtDesc(app.getPhone()).orElse(null);
+            }
             if (tv != null) {
                 tg.setVerified("VERIFIED".equals(tv.getStatus()));
                 tg.setChannelName(tv.getChatTitle());
