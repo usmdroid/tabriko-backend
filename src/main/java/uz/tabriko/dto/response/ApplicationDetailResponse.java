@@ -19,6 +19,7 @@ public class ApplicationDetailResponse {
     private String igUsername;
     private String igVerifyCode;
     private boolean igOwnershipConfirmed;
+    private String telegramUsername;
     private UUID telegramVerificationId;
     private String sampleVideoUrl;
     private String status;

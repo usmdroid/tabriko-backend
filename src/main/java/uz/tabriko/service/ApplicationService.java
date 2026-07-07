@@ -6,6 +6,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.*;
 import uz.tabriko.domain.enums.*;
@@ -17,7 +18,9 @@ import uz.tabriko.dto.response.ApplicationMessageResponse;
 import uz.tabriko.dto.response.ApplicationSubmitResponse;
 import uz.tabriko.dto.response.ApplicationVerificationResponse;
 import uz.tabriko.dto.response.PageResponse;
+import uz.tabriko.dto.response.SampleUploadResponse;
 import uz.tabriko.infrastructure.firebase.OtpService;
+import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.repository.*;
 import uz.tabriko.security.UserPrincipal;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
@@ -26,6 +29,7 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -34,7 +38,28 @@ import java.util.stream.Collectors;
 public class ApplicationService {
 
     private static final String IG_INSTRUCTIONS =
-            "Add the code to your Instagram bio or latest post caption, then ask the moderator to confirm.";
+            "Ushbu matnni nusxalab, Instagram orqali @tabriko akkauntiga Direct (DM) xabar sifatida yuboring.";
+
+    // Pre-approved verification phrases — one is picked at random per application
+    // and must be sent verbatim via Instagram DM to @tabriko so a moderator can
+    // match the sender's IG username to this application.
+    private static final List<String> IG_VERIFY_PHRASES = List.of(
+            "TabrikO orqali sizga chin dildan tabriklar yubormoqchiman!",
+            "Hayotingizga yana bir quvonchli lahza — TabrikO bilan!",
+            "Kulib yashang, TabrikO doim yoningizda!",
+            "Bugun ajoyib kun, TabrikO buni nishonlaydi!",
+            "TabrikO — har bir tabrikni maxsus qiladi.",
+            "Yulduzlardan tabrik — faqat TabrikO'da!",
+            "Baxtli lahzalar TabrikO bilan boshlanadi.",
+            "TabrikO sizga ilhom va tabassum ulashadi.",
+            "Har bir bayram TabrikO bilan yanada yorqin.",
+            "TabrikO — sizning shaxsiy tabrik do'stingiz.",
+            "Quvonchni ulashish TabrikO bilan oson.",
+            "TabrikO orqali yuragingizdagi so'zlarni ayting."
+    );
+
+    private static final long MAX_SAMPLE_VIDEO_BYTES = 50L * 1024 * 1024;
+    private static final Set<String> ALLOWED_SAMPLE_EXTENSIONS = Set.of("mp4", "mov");
 
     private final OtpService otpService;
     private final CreatorApplicationRepository applicationRepo;
@@ -43,6 +68,7 @@ public class ApplicationService {
     private final UserRepository userRepo;
     private final CreatorProfileRepository creatorProfileRepo;
     private final TelegramVerificationRepository telegramVerificationRepo;
+    private final MediaStorageService mediaStorage;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -93,7 +119,9 @@ public class ApplicationService {
             igVerifyCode = generateIgVerifyCode();
             app.setIgVerifyCode(igVerifyCode);
         } else {
-            // TELEGRAM: link existing TelegramVerification by phone if available
+            // TELEGRAM: username is stored for reference; actual verification happens
+            // via the bot conversation, linked below by phone if already completed.
+            app.setTelegramUsername(req.getTelegramUsername());
             telegramVerificationRepo.findFirstByPhoneOrderByCreatedAtDesc(req.getPhone())
                     .ifPresent(app::setTelegramVerification);
         }
@@ -106,6 +134,27 @@ public class ApplicationService {
         resp.setStatus(app.getStatus().name());
         resp.setIgVerifyCode(igVerifyCode);
         resp.setIgInstructions(igVerifyCode != null ? IG_INSTRUCTIONS : null);
+        return resp;
+    }
+
+    public SampleUploadResponse uploadSample(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw ApiException.badRequest("File is required");
+        }
+        if (file.getSize() > MAX_SAMPLE_VIDEO_BYTES) {
+            throw ApiException.badRequest("File size exceeds 50MB limit");
+        }
+        String name = file.getOriginalFilename();
+        String ext = (name != null && name.contains("."))
+                ? name.substring(name.lastIndexOf('.') + 1).toLowerCase()
+                : "";
+        if (!ALLOWED_SAMPLE_EXTENSIONS.contains(ext)) {
+            throw ApiException.badRequest("Unsupported file type. Allowed: mp4, mov");
+        }
+
+        String url = mediaStorage.store(file, "applications");
+        SampleUploadResponse resp = new SampleUploadResponse();
+        resp.setUrl(url);
         return resp;
     }
 
@@ -292,6 +341,7 @@ public class ApplicationService {
         dto.setIgUsername(app.getIgUsername());
         dto.setIgVerifyCode(app.getIgVerifyCode());
         dto.setIgOwnershipConfirmed(app.isIgOwnershipConfirmed());
+        dto.setTelegramUsername(app.getTelegramUsername());
         if (app.getTelegramVerification() != null) {
             dto.setTelegramVerificationId(app.getTelegramVerification().getId());
         }
@@ -350,7 +400,6 @@ public class ApplicationService {
     }
 
     private String generateIgVerifyCode() {
-        int num = secureRandom.nextInt(900000) + 100000;
-        return "TABRIKO-" + num;
+        return IG_VERIFY_PHRASES.get(secureRandom.nextInt(IG_VERIFY_PHRASES.size()));
     }
 }

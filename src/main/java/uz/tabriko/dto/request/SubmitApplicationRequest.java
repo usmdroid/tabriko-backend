@@ -15,6 +15,7 @@ public class SubmitApplicationRequest {
     @NotBlank
     private String code;
 
+    @NotBlank
     private String name;
 
     @NotNull
@@ -28,6 +29,9 @@ public class SubmitApplicationRequest {
     private ApplicationSocialType socialType;
 
     private String igUsername;
+
+    // Applicant-entered Telegram channel/group username (reference only).
+    private String telegramUsername;
 
     private String sampleVideoUrl;
 }

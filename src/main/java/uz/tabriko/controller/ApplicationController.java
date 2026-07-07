@@ -5,8 +5,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.dto.request.ReplyApplicationRequest;
 import uz.tabriko.dto.request.SubmitApplicationRequest;
@@ -27,6 +29,13 @@ public class ApplicationController {
     public ResponseEntity<BaseResponse<?>> submit(@Valid @RequestBody SubmitApplicationRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(BaseResponse.created(applicationService.submit(req)));
+    }
+
+    @PostMapping(value = "/upload-sample", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload a sample video for a creator application (public, size/type limited)")
+    public ResponseEntity<BaseResponse<?>> uploadSample(@RequestParam("file") MultipartFile file) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(BaseResponse.created(applicationService.uploadSample(file)));
     }
 
     @GetMapping("/{id}")

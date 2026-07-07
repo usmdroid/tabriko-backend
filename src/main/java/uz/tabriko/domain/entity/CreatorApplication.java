@@ -45,11 +45,16 @@ public class CreatorApplication {
     @Column(name = "ig_username", length = 100)
     private String igUsername;
 
-    @Column(name = "ig_verify_code", length = 40)
+    @Column(name = "ig_verify_code", length = 255)
     private String igVerifyCode;
 
     @Column(name = "ig_ownership_confirmed", nullable = false)
     private boolean igOwnershipConfirmed = false;
+
+    // Applicant-entered Telegram channel/group username, for reference only —
+    // actual verification happens via the bot conversation (TelegramVerification).
+    @Column(name = "telegram_username", length = 100)
+    private String telegramUsername;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "telegram_verification_id")
