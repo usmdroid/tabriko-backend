@@ -6,4 +6,5 @@ import lombok.Data;
 public class PhoneVerifyResponse {
     private String phone;
     private String verifyToken;
+    private String igVerifyCode;
 }

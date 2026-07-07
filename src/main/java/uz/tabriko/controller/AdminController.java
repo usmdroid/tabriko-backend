@@ -11,9 +11,11 @@ import org.springframework.web.bind.annotation.*;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.dto.request.AddCreatorRequest;
 import uz.tabriko.dto.request.AdminCategoryRequest;
+import uz.tabriko.dto.request.AdminOccasionRequest;
 import uz.tabriko.dto.request.FlagCreatorRequest;
 import uz.tabriko.dto.response.PlatformSettings;
 import uz.tabriko.service.AdminService;
+import uz.tabriko.service.OccasionService;
 
 import java.util.UUID;
 
@@ -25,6 +27,7 @@ import java.util.UUID;
 public class AdminController {
 
     private final AdminService adminService;
+    private final OccasionService occasionService;
 
     // --- Categories ---
 
@@ -65,6 +68,40 @@ public class AdminController {
     @PreAuthorize("hasRole('SUPERADMIN')")
     public ResponseEntity<BaseResponse<?>> restoreCategory(@PathVariable Long id) {
         adminService.restoreCategory(id);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    // --- Occasions ---
+
+    @GetMapping("/occasions")
+    @Operation(summary = "List all occasions")
+    public ResponseEntity<BaseResponse<?>> listOccasions() {
+        return ResponseEntity.ok(BaseResponse.ok(occasionService.getAdminOccasions()));
+    }
+
+    @PostMapping("/occasions")
+    @Operation(summary = "Create a new occasion")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> createOccasion(@Valid @RequestBody AdminOccasionRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(BaseResponse.created(occasionService.createOccasion(req)));
+    }
+
+    @PutMapping("/occasions/{id}")
+    @Operation(summary = "Update an occasion")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> updateOccasion(
+            @PathVariable Long id,
+            @Valid @RequestBody AdminOccasionRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(occasionService.updateOccasion(id, req)));
+    }
+
+    @DeleteMapping("/occasions/{id}")
+    @Operation(summary = "Delete an occasion")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> deleteOccasion(@PathVariable Long id) {
+        occasionService.deleteOccasion(id);
         return ResponseEntity.ok(BaseResponse.ok());
     }
 

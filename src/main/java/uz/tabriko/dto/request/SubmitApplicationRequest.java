@@ -32,10 +32,6 @@ public class SubmitApplicationRequest {
 
     private String igUsername;
 
-    // The exact phrase the applicant was shown (via GET /ig-verify-phrase) and
-    // is expected to DM to @tabriko. Validated server-side against the known pool.
-    private String igVerifyCode;
-
     // Applicant-entered Telegram channel/group username (reference only).
     private String telegramUsername;
 

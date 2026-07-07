@@ -21,4 +21,6 @@ public interface CreatorApplicationRepository extends JpaRepository<CreatorAppli
     Page<CreatorApplication> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     boolean existsByPhoneAndStatusIn(String phone, Collection<ApplicationStatus> statuses);
+
+    boolean existsByIgVerifyCode(String igVerifyCode);
 }

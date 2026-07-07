@@ -13,7 +13,6 @@ import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.dto.request.ReplyApplicationRequest;
 import uz.tabriko.dto.request.SubmitApplicationRequest;
 import uz.tabriko.dto.request.VerifyPhoneRequest;
-import uz.tabriko.dto.response.IgVerifyPhraseResponse;
 import uz.tabriko.service.ApplicationService;
 
 import java.util.UUID;
@@ -38,14 +37,6 @@ public class ApplicationController {
     public ResponseEntity<BaseResponse<?>> submit(@Valid @RequestBody SubmitApplicationRequest req) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(BaseResponse.created(applicationService.submit(req)));
-    }
-
-    @GetMapping("/ig-verify-phrase")
-    @Operation(summary = "Get a random Instagram DM verification phrase to show/copy before submitting")
-    public ResponseEntity<BaseResponse<?>> igVerifyPhrase() {
-        IgVerifyPhraseResponse resp = new IgVerifyPhraseResponse();
-        resp.setPhrase(applicationService.randomIgVerifyPhrase());
-        return ResponseEntity.ok(BaseResponse.ok(resp));
     }
 
     @PostMapping(value = "/upload-sample", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

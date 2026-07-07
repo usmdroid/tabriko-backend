@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.service.CatalogService;
+import uz.tabriko.service.OccasionService;
 
 import java.util.UUID;
 
@@ -17,6 +18,7 @@ import java.util.UUID;
 public class CatalogController {
 
     private final CatalogService catalogService;
+    private final OccasionService occasionService;
 
     @GetMapping("/categories")
     @Operation(summary = "List all categories")
@@ -53,5 +55,13 @@ public class CatalogController {
     @Operation(summary = "Get creator by ID")
     public ResponseEntity<BaseResponse<?>> getCreator(@PathVariable UUID id) {
         return ResponseEntity.ok(BaseResponse.ok(catalogService.getCreator(id)));
+    }
+
+    @GetMapping("/catalog/occasions/upcoming")
+    @Operation(summary = "Upcoming occasions for the home screen carousel")
+    public ResponseEntity<BaseResponse<?>> getUpcomingOccasions(
+            @RequestParam(defaultValue = "6") int limit
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(occasionService.getUpcoming(limit)));
     }
 }

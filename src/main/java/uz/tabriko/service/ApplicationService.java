@@ -42,29 +42,12 @@ import java.util.stream.Collectors;
 public class ApplicationService {
 
     private static final String IG_INSTRUCTIONS =
-            "Ushbu matnni nusxalab, Instagram orqali @tabriko akkauntiga Direct (DM) xabar sifatida yuboring.";
+            "Ushbu kodni nusxalab, Instagram orqali @tabriko akkauntiga Direct (DM) xabar sifatida yuboring.";
 
-    // Pre-approved verification phrases — deliberately ordinary, chit-chat-style
-    // sentences (not obviously a "code") so the DM looks like a normal message.
-    // One is picked at random per application (or fetched via GET /ig-verify-phrase
-    // and echoed back at submit) and must be sent verbatim via Instagram DM to
-    // @tabriko so a moderator can match the sender's IG username to this application.
-    private static final List<String> IG_VERIFY_PHRASES = List.of(
-            "Bugun havo juda ajoyib. Tabriklashli havo bo'layapti-da.",
-            "Salom! Sizning sahifangizni ko'rib qoldim, juda yoqdi.",
-            "Assalomu alaykum, bugun kayfiyatingiz qanday?",
-            "Shu kunlar juda tez o'tyapti, sezyapsizmi?",
-            "Kecha ajoyib bir kun bo'ldi, his qildingizmi?",
-            "Bugun kimningdir kunini yaxshilashga arziydi.",
-            "Salom, uzoq vaqtdan beri shu mavzuni kuzatib yuribman.",
-            "Hafta oxiri yaqinlashyapti, rejalar bormi?",
-            "Assalomu alaykum, sizga bir savolim bor edi.",
-            "Bugun tashqarida juda yoqimli, sayrga chiqqim keldi.",
-            "Salom! Ancha bo'ldi yozmaganimga, qalaysiz?",
-            "Har kuni yangi narsa o'rganish menga yoqadi.",
-            "Bugun kayfiyat zo'r, shunchaki ulashgim keldi.",
-            "Assalomu alaykum, ishlar qalay yuryapti?"
-    );
+    // Alphabet excludes visually ambiguous characters: 0, O, 1, I, L.
+    private static final String IG_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    private static final int IG_CODE_LENGTH = 6;
+    private static final String IG_CODE_PREFIX = "TBK-";
 
     private static final long MAX_SAMPLE_VIDEO_BYTES = 50L * 1024 * 1024;
     private static final Set<String> ALLOWED_SAMPLE_EXTENSIONS = Set.of("mp4", "mov");
@@ -95,23 +78,20 @@ public class ApplicationService {
         }
 
         String token = generateTrackingToken();
-        verifiedPhones.put(req.getPhone(), new VerifiedPhone(token, Instant.now().plusSeconds(VERIFY_TOKEN_TTL_SECONDS)));
+        String igCode = generateIgCode();
+        verifiedPhones.put(req.getPhone(),
+                new VerifiedPhone(token, Instant.now().plusSeconds(VERIFY_TOKEN_TTL_SECONDS), igCode));
 
         PhoneVerifyResponse resp = new PhoneVerifyResponse();
         resp.setPhone(req.getPhone());
         resp.setVerifyToken(token);
+        resp.setIgVerifyCode(igCode);
         return resp;
     }
 
     @Scheduled(fixedDelay = 60_000)
     void evictExpiredVerifications() {
         verifiedPhones.entrySet().removeIf(e -> e.getValue().isExpired());
-    }
-
-    // Lets the form show (and let the applicant copy) the exact phrase to DM
-    // before they submit — stateless, no side effects.
-    public String randomIgVerifyPhrase() {
-        return generateIgVerifyCode();
     }
 
     @Transactional
@@ -158,11 +138,7 @@ public class ApplicationService {
                 throw ApiException.badRequest("igUsername is required for INSTAGRAM social type");
             }
             app.setIgUsername(req.getIgUsername());
-            // Trust the frontend-shown phrase if it's one of ours (the applicant already
-            // copied it before submitting); otherwise fall back to picking a new one.
-            igVerifyCode = (req.getIgVerifyCode() != null && IG_VERIFY_PHRASES.contains(req.getIgVerifyCode()))
-                    ? req.getIgVerifyCode()
-                    : generateIgVerifyCode();
+            igVerifyCode = verified.igCode;
             app.setIgVerifyCode(igVerifyCode);
         } else {
             // TELEGRAM: username is stored for reference; actual verification happens
@@ -445,17 +421,27 @@ public class ApplicationService {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    private String generateIgVerifyCode() {
-        return IG_VERIFY_PHRASES.get(secureRandom.nextInt(IG_VERIFY_PHRASES.size()));
+    private String generateIgCode() {
+        String code;
+        do {
+            StringBuilder sb = new StringBuilder(IG_CODE_PREFIX);
+            for (int i = 0; i < IG_CODE_LENGTH; i++) {
+                sb.append(IG_CODE_ALPHABET.charAt(secureRandom.nextInt(IG_CODE_ALPHABET.length())));
+            }
+            code = sb.toString();
+        } while (applicationRepo.existsByIgVerifyCode(code));
+        return code;
     }
 
     private static final class VerifiedPhone {
         final String token;
         final Instant expiresAt;
+        final String igCode;
 
-        VerifiedPhone(String token, Instant expiresAt) {
+        VerifiedPhone(String token, Instant expiresAt, String igCode) {
             this.token = token;
             this.expiresAt = expiresAt;
+            this.igCode = igCode;
         }
 
         boolean isExpired() {

@@ -1,0 +1,49 @@
+package uz.tabriko.domain.entity;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "occasions")
+@Getter
+@Setter
+public class Occasion {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, length = 200)
+    private String title;
+
+    @Column(name = "event_date", nullable = false)
+    private LocalDate eventDate;
+
+    @Column(name = "recurring_yearly", nullable = false)
+    private boolean recurringYearly = false;
+
+    @Column(length = 16)
+    private String emoji;
+
+    @Column(length = 16)
+    private String color;
+
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
+    @Column(name = "category_id")
+    private Long categoryId;
+
+    @Column(nullable = false)
+    private boolean active = true;
+
+    @Column(name = "sort_order", nullable = false)
+    private int sortOrder = 0;
+
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
+}
