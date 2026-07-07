@@ -10,4 +10,6 @@ import java.util.UUID;
 @Repository
 public interface TelegramVerificationRepository extends JpaRepository<TelegramVerification, UUID> {
     Optional<TelegramVerification> findFirstByTelegramUserIdOrderByCreatedAtDesc(Long telegramUserId);
+
+    Optional<TelegramVerification> findFirstByPhoneOrderByCreatedAtDesc(String phone);
 }

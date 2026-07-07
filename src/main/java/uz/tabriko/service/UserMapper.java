@@ -28,7 +28,21 @@ public class UserMapper {
         CategoryResponse r = new CategoryResponse();
         r.setId(c.getId());
         r.setName(c.getName());
+        r.setNameUz(c.getName());
+        r.setNameRu(c.getNameRu());
+        r.setNameEn(c.getNameEn());
         r.setIconUrl(c.getIconUrl());
+        return r;
+    }
+
+    public AdminCategoryResponse toAdminCategoryResponse(Category c) {
+        AdminCategoryResponse r = new AdminCategoryResponse();
+        r.setId(c.getId());
+        r.setNameUz(c.getName());
+        r.setNameRu(c.getNameRu());
+        r.setNameEn(c.getNameEn());
+        r.setIconUrl(c.getIconUrl());
+        r.setArchived(c.isArchived());
         return r;
     }
 

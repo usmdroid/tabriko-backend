@@ -3,11 +3,11 @@ package uz.tabriko.dto.response;
 import lombok.Data;
 
 @Data
-public class CategoryResponse {
+public class AdminCategoryResponse {
     private Long id;
-    private String name;
     private String nameUz;
     private String nameRu;
     private String nameEn;
     private String iconUrl;
+    private boolean archived;
 }

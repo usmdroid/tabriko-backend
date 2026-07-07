@@ -10,6 +10,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.dto.request.AddCreatorRequest;
+import uz.tabriko.dto.request.AdminCategoryRequest;
 import uz.tabriko.dto.request.FlagCreatorRequest;
 import uz.tabriko.dto.response.PlatformSettings;
 import uz.tabriko.service.AdminService;
@@ -24,6 +25,50 @@ import java.util.UUID;
 public class AdminController {
 
     private final AdminService adminService;
+
+    // --- Categories ---
+
+    @GetMapping("/categories")
+    @Operation(summary = "List all categories — active and archived")
+    public ResponseEntity<BaseResponse<?>> listCategories() {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.getAdminCategories()));
+    }
+
+    @PostMapping("/categories")
+    @Operation(summary = "Create a new category")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> createCategory(@Valid @RequestBody AdminCategoryRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(BaseResponse.created(adminService.createCategory(req)));
+    }
+
+    @PutMapping("/categories/{id}")
+    @Operation(summary = "Update a category")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> updateCategory(
+            @PathVariable Long id,
+            @Valid @RequestBody AdminCategoryRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.updateCategory(id, req)));
+    }
+
+    @DeleteMapping("/categories/{id}")
+    @Operation(summary = "Soft-archive a category")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> archiveCategory(@PathVariable Long id) {
+        adminService.archiveCategory(id);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    @PostMapping("/categories/{id}/restore")
+    @Operation(summary = "Restore an archived category")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> restoreCategory(@PathVariable Long id) {
+        adminService.restoreCategory(id);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    // --- Creators ---
 
     @GetMapping("/creators")
     @Operation(summary = "List all creators (admin)")

@@ -29,7 +29,7 @@ public class CatalogService {
     private final UserMapper mapper;
 
     public List<CategoryResponse> getCategories() {
-        return categoryRepo.findAll().stream()
+        return categoryRepo.findByArchivedFalse().stream()
                 .map(mapper::toCategoryResponse)
                 .collect(Collectors.toList());
     }

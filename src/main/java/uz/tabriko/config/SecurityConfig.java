@@ -50,6 +50,8 @@ public class SecurityConfig {
                 // Public endpoints
                 .requestMatchers(
                     "/api/v1/auth/**",
+                    "/api/v1/applications/**",
+                    "/api/v1/categories/**",
                     "/api/v1/wallet/callback",
                     "/api/v1/media/signed",
                     "/api/v1/telegram/webhook",

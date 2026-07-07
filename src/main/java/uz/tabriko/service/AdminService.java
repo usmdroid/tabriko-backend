@@ -19,6 +19,7 @@ import uz.tabriko.domain.enums.TransactionStatus;
 import uz.tabriko.domain.enums.TransactionType;
 import uz.tabriko.domain.enums.UserStatus;
 import uz.tabriko.dto.request.AddCreatorRequest;
+import uz.tabriko.dto.request.AdminCategoryRequest;
 import uz.tabriko.dto.response.*;
 import uz.tabriko.infrastructure.payment.PaymentGateway;
 import uz.tabriko.repository.*;
@@ -59,6 +60,7 @@ public class AdminService {
 
         Category category = categoryRepo.findById(req.getCategoryId())
                 .orElseThrow(() -> ApiException.notFound("Category not found"));
+        if (category.isArchived()) throw ApiException.badRequest("Cannot assign an archived category");
 
         CreatorProfile cp = creatorProfileRepo.findByUserId(user.getId()).orElse(new CreatorProfile());
         cp.setUser(user);
@@ -68,6 +70,8 @@ public class AdminService {
         cp.setDeliveryDays(req.getDeliveryDays());
         cp.setVerified(false);
         cp.setTier(req.getTier() != null ? req.getTier() : uz.tabriko.domain.enums.CreatorTier.STANDARD);
+        if (req.getPassportSeries() != null) cp.setPassportSeries(req.getPassportSeries());
+        if (req.getPassportNumber() != null) cp.setPassportNumber(req.getPassportNumber());
         creatorProfileRepo.save(cp);
 
         return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(user.getId()));
@@ -170,6 +174,51 @@ public class AdminService {
         if (dto.getRegistrationOpen() != null) entity.setRegistrationOpen(dto.getRegistrationOpen());
         settingsRepo.save(entity);
         return toPlatformSettings(entity);
+    }
+
+    // --- Categories ---
+
+    public List<AdminCategoryResponse> getAdminCategories() {
+        return categoryRepo.findAll().stream()
+                .map(mapper::toAdminCategoryResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public AdminCategoryResponse createCategory(AdminCategoryRequest req) {
+        Category cat = new Category();
+        cat.setName(req.getNameUz());
+        cat.setNameRu(req.getNameRu());
+        cat.setNameEn(req.getNameEn());
+        cat.setIconUrl(req.getIconUrl());
+        return mapper.toAdminCategoryResponse(categoryRepo.save(cat));
+    }
+
+    @Transactional
+    public AdminCategoryResponse updateCategory(Long id, AdminCategoryRequest req) {
+        Category cat = categoryRepo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Category not found"));
+        cat.setName(req.getNameUz());
+        cat.setNameRu(req.getNameRu());
+        cat.setNameEn(req.getNameEn());
+        if (req.getIconUrl() != null) cat.setIconUrl(req.getIconUrl());
+        return mapper.toAdminCategoryResponse(categoryRepo.save(cat));
+    }
+
+    @Transactional
+    public void archiveCategory(Long id) {
+        Category cat = categoryRepo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Category not found"));
+        cat.setArchived(true);
+        categoryRepo.save(cat);
+    }
+
+    @Transactional
+    public void restoreCategory(Long id) {
+        Category cat = categoryRepo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Category not found"));
+        cat.setArchived(false);
+        categoryRepo.save(cat);
     }
 
     // --- Creator flags ---

@@ -28,4 +28,10 @@ public class AddCreatorRequest {
     private int deliveryDays = 3;
 
     private CreatorTier tier = CreatorTier.STANDARD;
+
+    @Pattern(regexp = "^[A-Z]{2}$")
+    private String passportSeries;
+
+    @Pattern(regexp = "^[0-9]{7}$")
+    private String passportNumber;
 }

@@ -88,6 +88,12 @@ public class CreatorProfile {
     @Column(name = "profile_complete", nullable = false)
     private boolean profileComplete = false;
 
+    @Column(name = "passport_series", length = 2)
+    private String passportSeries;
+
+    @Column(name = "passport_number", length = 7)
+    private String passportNumber;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
         name = "creator_profile_options",
