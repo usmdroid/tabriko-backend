@@ -12,10 +12,12 @@ import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.dto.request.AddCreatorRequest;
 import uz.tabriko.dto.request.AdminCategoryRequest;
 import uz.tabriko.dto.request.AdminOccasionRequest;
+import uz.tabriko.dto.request.AdminPromotionRequest;
 import uz.tabriko.dto.request.FlagCreatorRequest;
 import uz.tabriko.dto.response.PlatformSettings;
 import uz.tabriko.service.AdminService;
 import uz.tabriko.service.OccasionService;
+import uz.tabriko.service.PromotionService;
 
 import java.util.UUID;
 
@@ -28,6 +30,7 @@ public class AdminController {
 
     private final AdminService adminService;
     private final OccasionService occasionService;
+    private final PromotionService promotionService;
 
     // --- Categories ---
 
@@ -102,6 +105,40 @@ public class AdminController {
     @PreAuthorize("hasRole('SUPERADMIN')")
     public ResponseEntity<BaseResponse<?>> deleteOccasion(@PathVariable Long id) {
         occasionService.deleteOccasion(id);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    // --- Promotions ---
+
+    @GetMapping("/promotions")
+    @Operation(summary = "List all promotions")
+    public ResponseEntity<BaseResponse<?>> listPromotions() {
+        return ResponseEntity.ok(BaseResponse.ok(promotionService.getAdminPromotions()));
+    }
+
+    @PostMapping("/promotions")
+    @Operation(summary = "Create a new promotion")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> createPromotion(@Valid @RequestBody AdminPromotionRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(BaseResponse.created(promotionService.createPromotion(req)));
+    }
+
+    @PutMapping("/promotions/{id}")
+    @Operation(summary = "Update a promotion")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> updatePromotion(
+            @PathVariable Long id,
+            @Valid @RequestBody AdminPromotionRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(promotionService.updatePromotion(id, req)));
+    }
+
+    @DeleteMapping("/promotions/{id}")
+    @Operation(summary = "Delete a promotion")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> deletePromotion(@PathVariable Long id) {
+        promotionService.deletePromotion(id);
         return ResponseEntity.ok(BaseResponse.ok());
     }
 
