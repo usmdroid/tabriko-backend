@@ -19,9 +19,12 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import uz.tabriko.domain.entity.CreatorApplication;
 import uz.tabriko.repository.ApplicationMessageRepository;
 import uz.tabriko.repository.CreatorApplicationRepository;
+import uz.tabriko.telegram.entity.TelegramBotChat;
 import uz.tabriko.telegram.entity.TelegramVerification;
+import uz.tabriko.telegram.repository.TelegramBotChatRepository;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,6 +39,7 @@ class TelegramBotServiceTest {
 
     @Mock TelegramBotClient client;
     @Mock TelegramVerificationRepository repo;
+    @Mock TelegramBotChatRepository botChatRepo;
     @Mock CreatorApplicationRepository applicationRepo;
     @Mock ApplicationMessageRepository messageRepo;
 
@@ -255,6 +259,157 @@ class TelegramBotServiceTest {
         assertThat(msgCap.getValue().getText()).contains("/start");
     }
 
+    // ===== Reconciling chats recorded before phone-linking (order-independent flow) =====
+
+    private TelegramBotChat botChat(long userId, long chatId, String title) {
+        TelegramBotChat c = new TelegramBotChat();
+        c.setTelegramUserId(userId);
+        c.setChatId(chatId);
+        c.setChatTitle(title);
+        c.setSubscribers(42);
+        c.setOwnerStatus("administrator");
+        return c;
+    }
+
+    @Test
+    void handleContact_onePendingChat_autoConfirms() throws TelegramApiException {
+        long userId = 100L;
+
+        TelegramVerification session = new TelegramVerification();
+        session.setTelegramUserId(userId);
+        session.setStatus("STARTED");
+        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
+        when(applicationRepo.findFirstByPhoneOrderByCreatedAtDesc("+998901234567"))
+                .thenReturn(Optional.of(new CreatorApplication()));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(botChatRepo.findByTelegramUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(List.of(botChat(userId, 300L, "Pending Channel")));
+
+        service.handleUpdate(contactUpdate(userId, 200L, "998901234567"));
+
+        assertThat(session.getStatus()).isEqualTo("CHANNEL_READ");
+        assertThat(session.getChatId()).isEqualTo(300L);
+        assertThat(session.getChatTitle()).isEqualTo("Pending Channel");
+    }
+
+    @Test
+    void handleContact_multiplePendingChats_sendsPicker() throws TelegramApiException {
+        long userId = 100L;
+
+        TelegramVerification session = new TelegramVerification();
+        session.setTelegramUserId(userId);
+        session.setStatus("STARTED");
+        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
+        when(applicationRepo.findFirstByPhoneOrderByCreatedAtDesc("+998901234567"))
+                .thenReturn(Optional.of(new CreatorApplication()));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(botChatRepo.findByTelegramUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(List.of(botChat(userId, 300L, "Channel A"), botChat(userId, 301L, "Channel B")));
+
+        service.handleUpdate(contactUpdate(userId, 200L, "998901234567"));
+
+        assertThat(session.getStatus()).isEqualTo("PHONE_LINKED"); // not CHANNEL_READ until they pick one
+        ArgumentCaptor<SendMessage> msgCap = ArgumentCaptor.forClass(SendMessage.class);
+        verify(client, atLeastOnce()).execute(msgCap.capture());
+        SendMessage picker = msgCap.getAllValues().stream()
+                .filter(m -> m.getReplyMarkup() != null)
+                .findFirst().orElseThrow();
+        assertThat(picker.getReplyMarkup()).isInstanceOf(
+                org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup.class);
+    }
+
+    // ===== /tekshirish manual re-check command =====
+
+    private Update checkCommandUpdate(long userId, long chatId) {
+        var msg = new Message();
+        msg.setFrom(tgUser(userId));
+        msg.setChat(privateChat(chatId));
+        msg.setText("/tekshirish");
+        var update = new Update();
+        update.setUpdateId(5);
+        update.setMessage(msg);
+        return update;
+    }
+
+    @Test
+    void checkCommand_noPhoneLinked_promptsStart() throws TelegramApiException {
+        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.empty());
+
+        service.handleUpdate(checkCommandUpdate(100L, 200L));
+
+        ArgumentCaptor<SendMessage> msgCap = ArgumentCaptor.forClass(SendMessage.class);
+        verify(client).execute(msgCap.capture());
+        assertThat(msgCap.getValue().getText()).contains("/start");
+    }
+
+    @Test
+    void checkCommand_alreadyVerified_saysSoWithoutReconciling() {
+        TelegramVerification session = new TelegramVerification();
+        session.setTelegramUserId(100L);
+        session.setPhone("+998901234567");
+        session.setStatus("VERIFIED");
+        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.of(session));
+
+        service.handleUpdate(checkCommandUpdate(100L, 200L));
+
+        verify(botChatRepo, never()).findByTelegramUserIdOrderByCreatedAtDesc(any());
+    }
+
+    @Test
+    void checkCommand_onePendingChat_autoConfirms() {
+        TelegramVerification session = new TelegramVerification();
+        session.setTelegramUserId(100L);
+        session.setPhone("+998901234567");
+        session.setStatus("PHONE_LINKED");
+        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.of(session));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(botChatRepo.findByTelegramUserIdOrderByCreatedAtDesc(100L))
+                .thenReturn(List.of(botChat(100L, 300L, "Pending Channel")));
+
+        service.handleUpdate(checkCommandUpdate(100L, 200L));
+
+        assertThat(session.getStatus()).isEqualTo("CHANNEL_READ");
+        assertThat(session.getChatId()).isEqualTo(300L);
+    }
+
+    // ===== select_chat callback (picking one of several pending chats) =====
+
+    @Test
+    void selectChat_validChoice_appliesToSession() {
+        long userId = 100L;
+
+        TelegramVerification session = new TelegramVerification();
+        session.setTelegramUserId(userId);
+        session.setPhone("+998901234567");
+        session.setStatus("STARTED");
+        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(botChatRepo.findByChatId(301L)).thenReturn(Optional.of(botChat(userId, 301L, "Channel B")));
+
+        service.handleUpdate(callbackUpdate(userId, "select_chat:301"));
+
+        assertThat(session.getStatus()).isEqualTo("CHANNEL_READ");
+        assertThat(session.getChatId()).isEqualTo(301L);
+        assertThat(session.getChatTitle()).isEqualTo("Channel B");
+    }
+
+    @Test
+    void selectChat_chatOwnedByAnotherUser_ignored() {
+        long userId = 100L;
+
+        TelegramVerification session = new TelegramVerification();
+        session.setTelegramUserId(userId);
+        session.setPhone("+998901234567");
+        session.setStatus("STARTED");
+        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
+        when(botChatRepo.findByChatId(301L)).thenReturn(Optional.of(botChat(999L, 301L, "Someone Else's Channel")));
+
+        service.handleUpdate(callbackUpdate(userId, "select_chat:301"));
+
+        assertThat(session.getStatus()).isEqualTo("STARTED");
+        verify(repo, never()).save(any());
+    }
+
     // ===== handleMyChatMember =====
 
     @Test
@@ -280,24 +435,51 @@ class TelegramBotServiceTest {
         verify(repo, never()).findFirstByTelegramUserIdOrderByCreatedAtDesc(any());
     }
 
-    @Test
-    void myChatMember_sessionNotFound_ignored() throws TelegramApiException {
-        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.empty());
-
-        service.handleUpdate(myChatMemberUpdate(100L, 300L, "administrator"));
-
-        verify(client, never()).execute(any(SendMessage.class));
+    private void stubSuccessfulChatFetch(String ownerStatus, int subscribers, String title) throws TelegramApiException {
+        ChatMember member = mock(ChatMember.class);
+        when(member.getStatus()).thenReturn(ownerStatus);
+        when(client.execute(any(GetChatMember.class))).thenReturn(member);
+        when(client.execute(any(GetChatMemberCount.class))).thenReturn(subscribers);
+        Chat chatInfo = new Chat();
+        chatInfo.setTitle(title);
+        when(client.execute(any(GetChat.class))).thenReturn(chatInfo);
     }
 
     @Test
-    void myChatMember_sessionNotPhoneLinked_ignored() throws TelegramApiException {
-        TelegramVerification session = new TelegramVerification();
-        session.setStatus("STARTED");
-        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.of(session));
+    void myChatMember_sessionNotFound_recordsChatAndPromptsStart() throws TelegramApiException {
+        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.empty());
+        stubSuccessfulChatFetch("administrator", 10, "My Channel");
 
         service.handleUpdate(myChatMemberUpdate(100L, 300L, "administrator"));
 
-        verify(client, never()).execute(any(SendMessage.class));
+        verify(botChatRepo).save(any(TelegramBotChat.class));
+        ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
+        verify(client).execute(captor.capture());
+        assertThat(captor.getValue().getText()).contains("/start");
+    }
+
+    @Test
+    void myChatMember_sessionNotPhoneLinked_recordsChatAndPromptsStart() throws TelegramApiException {
+        TelegramVerification session = new TelegramVerification();
+        session.setStatus("STARTED");
+        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.of(session));
+        stubSuccessfulChatFetch("administrator", 10, "My Channel");
+
+        service.handleUpdate(myChatMemberUpdate(100L, 300L, "administrator"));
+
+        verify(botChatRepo).save(any(TelegramBotChat.class));
+        assertThat(session.getStatus()).isEqualTo("STARTED"); // unchanged — not reconciled yet
+        ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
+        verify(client).execute(captor.capture());
+        assertThat(captor.getValue().getText()).contains("/start");
+    }
+
+    @Test
+    void myChatMember_demoted_deletesStoredChat() {
+        service.handleUpdate(myChatMemberUpdate(100L, 300L, "member"));
+
+        verify(botChatRepo).deleteByChatId(300L);
+        verify(repo, never()).findFirstByTelegramUserIdOrderByCreatedAtDesc(any());
     }
 
     @Test
