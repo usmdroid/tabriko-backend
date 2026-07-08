@@ -25,6 +25,13 @@ public class ApplicationController {
 
     private final ApplicationService applicationService;
 
+    @GetMapping("/exists")
+    @Operation(summary = "Whether an active application already exists for this phone (checked before OTP)")
+    public ResponseEntity<BaseResponse<?>> exists(@RequestParam String phone) {
+        return ResponseEntity.ok(BaseResponse.ok(
+                java.util.Map.of("exists", applicationService.existsActiveByPhone(phone))));
+    }
+
     @PostMapping("/verify-phone")
     @Operation(summary = "Verify the OTP right away and exchange it for a longer-lived verifyToken " +
             "used by POST /applications, so the short OTP TTL doesn't expire while the form is filled out")

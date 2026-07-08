@@ -15,7 +15,9 @@ public class ApplicationDetailResponse {
     private Long categoryId;
     private String categoryName;
     private String otherText;
-    private String socialType;
+    private String passportSeries;
+    private String passportNumber;
+    private List<String> socialTypes;
     private String igUsername;
     private String igVerifyCode;
     private boolean igOwnershipConfirmed;

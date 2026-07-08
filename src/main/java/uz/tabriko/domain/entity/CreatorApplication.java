@@ -9,6 +9,8 @@ import uz.tabriko.domain.enums.ApplicationStatus;
 import uz.tabriko.telegram.entity.TelegramVerification;
 
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -38,9 +40,20 @@ public class CreatorApplication {
     @Column(name = "other_text", length = 255)
     private String otherText;
 
+    @Column(name = "passport_series", length = 2)
+    private String passportSeries;
+
+    @Column(name = "passport_number", length = 7)
+    private String passportNumber;
+
+    // A creator may run more than one network — Telegram and/or Instagram.
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "application_social_types",
+            joinColumns = @JoinColumn(name = "application_id"))
     @Enumerated(EnumType.STRING)
     @Column(name = "social_type", nullable = false, length = 20)
-    private ApplicationSocialType socialType;
+    private Set<ApplicationSocialType> socialTypes = new HashSet<>();
 
     @Column(name = "ig_username", length = 100)
     private String igUsername;

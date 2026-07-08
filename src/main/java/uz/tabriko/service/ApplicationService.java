@@ -57,6 +57,10 @@ public class ApplicationService {
     // the applicant fills out the rest of the form — much longer than the OTP's own TTL.
     private static final long VERIFY_TOKEN_TTL_SECONDS = 1800; // 30 minutes
 
+    // Statuses in which an application blocks a new submission (and is worth resuming).
+    private static final List<ApplicationStatus> ACTIVE_STATUSES = List.of(
+            ApplicationStatus.SUBMITTED, ApplicationStatus.UNDER_REVIEW, ApplicationStatus.INFO_REQUESTED);
+
     private final OtpService otpService;
     private final CreatorApplicationRepository applicationRepo;
     private final ApplicationMessageRepository messageRepo;
@@ -88,7 +92,21 @@ public class ApplicationService {
         resp.setPhone(req.getPhone());
         resp.setVerifyToken(token);
         resp.setIgVerifyCode(igCode);
+
+        // If an active application already exists, surface its tracking token so the
+        // client can jump straight to the status page instead of a blocked new form.
+        applicationRepo.findFirstByPhoneOrderByCreatedAtDesc(req.getPhone())
+                .filter(a -> ACTIVE_STATUSES.contains(a.getStatus()))
+                .ifPresent(a -> {
+                    resp.setExistingApplicationId(a.getId());
+                    resp.setExistingTrackingToken(a.getTrackingToken());
+                });
         return resp;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean existsActiveByPhone(String phone) {
+        return applicationRepo.existsByPhoneAndStatusIn(phone, ACTIVE_STATUSES);
     }
 
     @Scheduled(fixedDelay = 60_000)
@@ -104,8 +122,7 @@ public class ApplicationService {
         }
         verifiedPhones.remove(req.getPhone());
 
-        if (applicationRepo.existsByPhoneAndStatusIn(req.getPhone(),
-                List.of(ApplicationStatus.SUBMITTED, ApplicationStatus.UNDER_REVIEW, ApplicationStatus.INFO_REQUESTED))) {
+        if (applicationRepo.existsByPhoneAndStatusIn(req.getPhone(), ACTIVE_STATUSES)) {
             throw ApiException.conflict("An active application already exists for this phone");
         }
 
@@ -113,7 +130,9 @@ public class ApplicationService {
         app.setPhone(req.getPhone());
         app.setName(req.getName());
         app.setActivityType(req.getActivityType());
-        app.setSocialType(req.getSocialType());
+        app.setPassportSeries(req.getPassportSeries().toUpperCase());
+        app.setPassportNumber(req.getPassportNumber());
+        app.setSocialTypes(req.getSocialTypes());
         app.setSampleVideoUrl(req.getSampleVideoUrl());
         app.setStatus(ApplicationStatus.SUBMITTED);
         app.setTrackingToken(generateTrackingToken());
@@ -134,17 +153,19 @@ public class ApplicationService {
             app.setOtherText(req.getOtherText());
         }
 
+        // A creator may select both networks; each is handled independently.
         String igVerifyCode = null;
-        if (req.getSocialType() == ApplicationSocialType.INSTAGRAM) {
+        if (req.getSocialTypes().contains(ApplicationSocialType.INSTAGRAM)) {
             if (req.getIgUsername() == null || req.getIgUsername().isBlank()) {
-                throw ApiException.badRequest("igUsername is required for INSTAGRAM social type");
+                throw ApiException.badRequest("igUsername is required when INSTAGRAM is selected");
             }
             app.setIgUsername(req.getIgUsername());
             igVerifyCode = verified.igCode;
             app.setIgVerifyCode(igVerifyCode);
-        } else {
-            // TELEGRAM: username is stored for reference; actual verification happens
-            // via the bot conversation, linked below by phone if already completed.
+        }
+        if (req.getSocialTypes().contains(ApplicationSocialType.TELEGRAM)) {
+            // Username is stored for reference; actual verification happens via the bot
+            // conversation, linked below by phone if already completed.
             app.setTelegramUsername(req.getTelegramUsername());
             telegramVerificationRepo.findFirstByPhoneOrderByCreatedAtDesc(req.getPhone())
                     .ifPresent(app::setTelegramVerification);
@@ -375,7 +396,9 @@ public class ApplicationService {
             dto.setCategoryName(app.getCategory().getName());
         }
         dto.setOtherText(app.getOtherText());
-        dto.setSocialType(app.getSocialType().name());
+        dto.setPassportSeries(app.getPassportSeries());
+        dto.setPassportNumber(app.getPassportNumber());
+        dto.setSocialTypes(app.getSocialTypes().stream().map(Enum::name).sorted().toList());
         dto.setIgUsername(app.getIgUsername());
         dto.setIgVerifyCode(app.getIgVerifyCode());
         dto.setIgOwnershipConfirmed(app.isIgOwnershipConfirmed());
@@ -408,7 +431,8 @@ public class ApplicationService {
 
     private ApplicationVerificationResponse buildVerification(CreatorApplication app) {
         ApplicationVerificationResponse v = new ApplicationVerificationResponse();
-        if (app.getSocialType() == ApplicationSocialType.TELEGRAM) {
+        // Both networks are independent — populate whichever the applicant selected.
+        if (app.getSocialTypes().contains(ApplicationSocialType.TELEGRAM)) {
             ApplicationVerificationResponse.TelegramDetail tg = new ApplicationVerificationResponse.TelegramDetail();
             var tv = app.getTelegramVerification();
             // The bot completes verification AFTER the application is submitted, so the
@@ -426,7 +450,8 @@ public class ApplicationService {
             }
             // verified=false and all fields null when no linked record
             v.setTelegram(tg);
-        } else if (app.getSocialType() == ApplicationSocialType.INSTAGRAM) {
+        }
+        if (app.getSocialTypes().contains(ApplicationSocialType.INSTAGRAM)) {
             ApplicationVerificationResponse.InstagramDetail ig = new ApplicationVerificationResponse.InstagramDetail();
             ig.setUsername(app.getIgUsername());
             ig.setVerifyCode(app.getIgVerifyCode());

@@ -38,6 +38,7 @@ class AdminControllerTest {
     @Autowired MockMvc mvc;
 
     @MockBean AdminService adminService;
+    @MockBean uz.tabriko.service.OccasionService occasionService;
     @MockBean uz.tabriko.security.JwtUtil jwtUtil;
 
     /**

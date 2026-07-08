@@ -22,6 +22,7 @@ import uz.tabriko.repository.UserRepository;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
 import uz.tabriko.telegram.service.TelegramBotService;
 
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -110,7 +111,9 @@ class ApplicationServiceTest {
         submitReq.setName("Test Applicant");
         submitReq.setActivityType(ApplicationActivityType.OTHER);
         submitReq.setOtherText("blogging");
-        submitReq.setSocialType(ApplicationSocialType.INSTAGRAM);
+        submitReq.setPassportSeries("AB");
+        submitReq.setPassportNumber("1234567");
+        submitReq.setSocialTypes(Set.of(ApplicationSocialType.INSTAGRAM));
         submitReq.setIgUsername("test_ig_user");
 
         when(applicationRepo.save(org.mockito.ArgumentMatchers.any(CreatorApplication.class)))
@@ -143,7 +146,9 @@ class ApplicationServiceTest {
         submitReq.setName("Test Applicant");
         submitReq.setActivityType(ApplicationActivityType.OTHER);
         submitReq.setOtherText("blogging");
-        submitReq.setSocialType(ApplicationSocialType.TELEGRAM);
+        submitReq.setPassportSeries("AB");
+        submitReq.setPassportNumber("1234567");
+        submitReq.setSocialTypes(Set.of(ApplicationSocialType.TELEGRAM));
         submitReq.setTelegramUsername("test_channel");
 
         when(applicationRepo.save(org.mockito.ArgumentMatchers.any(CreatorApplication.class)))
