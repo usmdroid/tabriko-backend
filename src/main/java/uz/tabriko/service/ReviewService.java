@@ -66,6 +66,7 @@ public class ReviewService {
         return mapper.toReviewResponse(review);
     }
 
+    @Transactional(readOnly = true)
     public PageResponse<ReviewResponse> getCreatorReviews(UUID creatorId, int page, int size) {
         return PageResponse.of(
                 reviewRepo.findByCreatorIdOrderByCreatedAtDesc(creatorId, PageRequest.of(page, size)),

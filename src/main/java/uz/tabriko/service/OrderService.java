@@ -23,6 +23,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -85,20 +86,22 @@ public class OrderService {
         return mapper.toOrderResponse(order, null);
     }
 
+    @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getMyOrders(UUID userId, String role, int page, int size) {
         var pageable = PageRequest.of(page, size);
-        if ("CREATOR".equals(role)) {
-            return PageResponse.of(
-                    orderRepo.findByCreatorIdOrderByCreatedAtDesc(userId, pageable),
-                    o -> mapper.toOrderResponse(o, deliveryRepo.findByOrderId(o.getId()).orElse(null))
-            );
-        }
-        return PageResponse.of(
-                orderRepo.findByClientIdOrderByCreatedAtDesc(userId, pageable),
-                o -> mapper.toOrderResponse(o, deliveryRepo.findByOrderId(o.getId()).orElse(null))
-        );
+        var orders = "CREATOR".equals(role)
+                ? orderRepo.findByCreatorIdOrderByCreatedAtDesc(userId, pageable)
+                : orderRepo.findByClientIdOrderByCreatedAtDesc(userId, pageable);
+
+        List<UUID> orderIds = orders.getContent().stream().map(Order::getId).collect(java.util.stream.Collectors.toList());
+        Map<UUID, Delivery> deliveryByOrderId = orderIds.isEmpty() ? Map.of()
+                : deliveryRepo.findByOrderIdIn(orderIds).stream()
+                        .collect(java.util.stream.Collectors.toMap(d -> d.getOrder().getId(), d -> d));
+
+        return PageResponse.of(orders, o -> mapper.toOrderResponse(o, deliveryByOrderId.get(o.getId())));
     }
 
+    @Transactional(readOnly = true)
     public OrderResponse getOrder(UUID userId, UUID orderId) {
         Order order = orderRepo.findById(orderId)
                 .orElseThrow(() -> ApiException.notFound("Order not found"));

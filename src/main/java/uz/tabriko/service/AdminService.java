@@ -1,6 +1,7 @@
 package uz.tabriko.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,12 +28,15 @@ import uz.tabriko.repository.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class AdminService {
+
+    private static final int MAX_ADMIN_CREATORS_PAGE_SIZE = 200;
 
     private final UserRepository userRepo;
     private final CreatorProfileRepository creatorProfileRepo;
@@ -88,13 +92,30 @@ public class AdminService {
         return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(creatorId));
     }
 
+    @Transactional(readOnly = true)
     public List<CreatorResponse> getAllCreators() {
-        return creatorProfileRepo.findAll().stream()
-                .map(cp -> mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(cp.getUserId())))
+        return getAllCreators(0, MAX_ADMIN_CREATORS_PAGE_SIZE);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CreatorResponse> getAllCreators(int page, int size) {
+        int boundedSize = Math.min(size, MAX_ADMIN_CREATORS_PAGE_SIZE);
+        Page<CreatorProfile> profiles = creatorProfileRepo.findAllWithUser(PageRequest.of(page, boundedSize));
+        List<CreatorProfile> content = profiles.getContent();
+        if (content.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> creatorIds = content.stream().map(CreatorProfile::getUserId).collect(Collectors.toList());
+        Map<UUID, List<uz.tabriko.domain.entity.PortfolioItem>> portfolioByCreator =
+                portfolioRepo.findPublicWithConsentByCreatorIds(creatorIds).stream()
+                        .collect(Collectors.groupingBy(p -> p.getCreator().getId()));
+        return content.stream()
+                .map(cp -> mapper.toCreatorResponse(cp, portfolioByCreator.getOrDefault(cp.getUserId(), List.of())))
                 .collect(Collectors.toList());
     }
 
     // Returns a page of all orders; frontend reads .content
+    @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getAllOrders(int page, int size) {
         return PageResponse.of(
                 orderRepo.findAllByOrderByCreatedAtDesc(PageRequest.of(page, size)),
@@ -147,6 +168,7 @@ public class AdminService {
 
     // --- Stats ---
 
+    @Transactional(readOnly = true)
     public AdminStatsResponse getStats() {
         AdminStatsResponse r = new AdminStatsResponse();
         r.setRevenue(orderRepo.sumPriceByStatus(OrderStatus.ACCEPTED));
@@ -160,9 +182,12 @@ public class AdminService {
 
     // --- Settings ---
 
+    @Transactional(readOnly = true)
     public PlatformSettings getSettings() {
+        // Read-only: return in-memory defaults if no row exists yet.
+        // Persisting the default row is handled by updateSettings, the write path.
         PlatformSettingsEntity entity = settingsRepo.findById(1)
-                .orElseGet(() -> settingsRepo.save(new PlatformSettingsEntity()));
+                .orElseGet(PlatformSettingsEntity::new);
         return toPlatformSettings(entity);
     }
 

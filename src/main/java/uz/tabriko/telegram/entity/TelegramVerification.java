@@ -3,6 +3,9 @@ package uz.tabriko.telegram.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import uz.tabriko.telegram.enums.TelegramChatType;
+import uz.tabriko.telegram.enums.TelegramOwnerStatus;
+import uz.tabriko.telegram.enums.TelegramVerificationStatus;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -35,17 +38,20 @@ public class TelegramVerification {
     @Column(name = "chat_title", length = 255)
     private String chatTitle;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "chat_type", length = 30)
-    private String chatType;
+    private TelegramChatType chatType;
 
     @Column(name = "subscribers")
     private Integer subscribers;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "owner_status", length = 20)
-    private String ownerStatus;
+    private TelegramOwnerStatus ownerStatus;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
-    private String status;
+    private TelegramVerificationStatus status;
 
     @Column(name = "verified_at")
     private Instant verifiedAt;

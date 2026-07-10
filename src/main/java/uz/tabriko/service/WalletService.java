@@ -79,6 +79,7 @@ public class WalletService {
         return balance.subtract(pendingWithdraw).subtract(activeHold).max(BigDecimal.ZERO);
     }
 
+    @Transactional(readOnly = true)
     public WalletResponse getWallet(UUID userId, int page, int size) {
         WalletResponse r = new WalletResponse();
         r.setBalance(getBalance(userId));

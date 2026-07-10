@@ -77,6 +77,7 @@ public class MediaService {
         return r;
     }
 
+    @Transactional(readOnly = true)
     public SignedUrlResponse getDownloadUrl(UUID userId, UUID orderId) {
         Order order = orderRepo.findById(orderId)
             .orElseThrow(() -> ApiException.notFound("Order not found"));

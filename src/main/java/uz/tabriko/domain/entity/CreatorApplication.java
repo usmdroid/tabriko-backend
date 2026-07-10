@@ -3,6 +3,7 @@ package uz.tabriko.domain.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 import uz.tabriko.domain.enums.ApplicationActivityType;
 import uz.tabriko.domain.enums.ApplicationSocialType;
 import uz.tabriko.domain.enums.ApplicationStatus;
@@ -47,7 +48,8 @@ public class CreatorApplication {
     private String passportNumber;
 
     // A creator may run more than one network — Telegram and/or Instagram.
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
     @CollectionTable(
             name = "application_social_types",
             joinColumns = @JoinColumn(name = "application_id"))

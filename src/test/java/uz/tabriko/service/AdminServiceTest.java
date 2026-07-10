@@ -415,14 +415,13 @@ class AdminServiceTest {
     }
 
     @Test
-    void getSettings_createsDefaultWhenAbsent() {
-        PlatformSettingsEntity defaults = new PlatformSettingsEntity();
+    void getSettings_returnsInMemoryDefaultWhenAbsent_withoutPersisting() {
         when(settingsRepo.findById(1)).thenReturn(Optional.empty());
-        when(settingsRepo.save(any())).thenReturn(defaults);
 
         PlatformSettings result = adminService.getSettings();
 
+        // getSettings is read-only: persisting a default row is updateSettings' job.
         assertThat(result).isNotNull();
-        verify(settingsRepo).save(any(PlatformSettingsEntity.class));
+        verify(settingsRepo, never()).save(any());
     }
 }

@@ -24,6 +24,8 @@ import uz.tabriko.repository.ApplicationMessageRepository;
 import uz.tabriko.repository.CreatorApplicationRepository;
 import uz.tabriko.telegram.entity.TelegramBotChat;
 import uz.tabriko.telegram.entity.TelegramVerification;
+import uz.tabriko.telegram.enums.TelegramOwnerStatus;
+import uz.tabriko.telegram.enums.TelegramVerificationStatus;
 import uz.tabriko.telegram.repository.TelegramBotChatRepository;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
 
@@ -133,7 +135,7 @@ class TelegramBotServiceTest {
         ArgumentCaptor<TelegramVerification> cap = ArgumentCaptor.forClass(TelegramVerification.class);
         verify(repo).save(cap.capture());
         assertThat(cap.getValue().getTelegramUserId()).isEqualTo(100L);
-        assertThat(cap.getValue().getStatus()).isEqualTo("STARTED");
+        assertThat(cap.getValue().getStatus()).isEqualTo(TelegramVerificationStatus.STARTED);
 
         ArgumentCaptor<SendMessage> msgCap = ArgumentCaptor.forClass(SendMessage.class);
         verify(client).execute(msgCap.capture());
@@ -167,7 +169,7 @@ class TelegramBotServiceTest {
 
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
-        session.setStatus("STARTED");
+        session.setStatus(TelegramVerificationStatus.STARTED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
 
         when(applicationRepo.findFirstByPhoneOrderByCreatedAtDesc("+998901234567"))
@@ -177,7 +179,7 @@ class TelegramBotServiceTest {
         service.handleUpdate(contactUpdate(userId, chatId, "998901234567"));
 
         assertThat(session.getPhone()).isEqualTo("+998901234567");
-        assertThat(session.getStatus()).isEqualTo("PHONE_LINKED");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.PHONE_LINKED);
         verify(repo).save(session);
     }
 
@@ -187,7 +189,7 @@ class TelegramBotServiceTest {
 
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
-        session.setStatus("STARTED");
+        session.setStatus(TelegramVerificationStatus.STARTED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
 
         when(applicationRepo.findFirstByPhoneOrderByCreatedAtDesc("+998901234567"))
@@ -197,7 +199,7 @@ class TelegramBotServiceTest {
         service.handleUpdate(contactUpdate(userId, 200L, "+998901234567"));
 
         assertThat(session.getPhone()).isEqualTo("+998901234567");
-        assertThat(session.getStatus()).isEqualTo("PHONE_LINKED");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.PHONE_LINKED);
     }
 
     @Test
@@ -206,7 +208,7 @@ class TelegramBotServiceTest {
 
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
-        session.setStatus("STARTED");
+        session.setStatus(TelegramVerificationStatus.STARTED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
         when(applicationRepo.findFirstByPhoneOrderByCreatedAtDesc("+99890123456")).thenReturn(Optional.empty());
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -214,7 +216,7 @@ class TelegramBotServiceTest {
         service.handleUpdate(contactUpdate(userId, 200L, "998-90-123-456"));
 
         assertThat(session.getPhone()).isEqualTo("+99890123456");
-        assertThat(session.getStatus()).isEqualTo("FAILED"); // no application for this phone
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.FAILED); // no application for this phone
     }
 
     @Test
@@ -223,14 +225,14 @@ class TelegramBotServiceTest {
 
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
-        session.setStatus("STARTED");
+        session.setStatus(TelegramVerificationStatus.STARTED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
         when(applicationRepo.findFirstByPhoneOrderByCreatedAtDesc(any())).thenReturn(Optional.empty());
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.handleUpdate(contactUpdate(userId, 200L, "998901234567"));
 
-        assertThat(session.getStatus()).isEqualTo("FAILED");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.FAILED);
     }
 
     @Test
@@ -251,7 +253,7 @@ class TelegramBotServiceTest {
         long userId = 100L;
 
         TelegramVerification session = new TelegramVerification();
-        session.setStatus("PHONE_LINKED"); // not STARTED
+        session.setStatus(TelegramVerificationStatus.PHONE_LINKED); // not STARTED
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
 
         service.handleUpdate(contactUpdate(userId, 200L, "998901234567"));
@@ -280,7 +282,7 @@ class TelegramBotServiceTest {
 
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
-        session.setStatus("STARTED");
+        session.setStatus(TelegramVerificationStatus.STARTED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
         when(applicationRepo.findFirstByPhoneOrderByCreatedAtDesc("+998901234567"))
                 .thenReturn(Optional.of(new CreatorApplication()));
@@ -290,7 +292,7 @@ class TelegramBotServiceTest {
 
         service.handleUpdate(contactUpdate(userId, 200L, "998901234567"));
 
-        assertThat(session.getStatus()).isEqualTo("CHANNEL_READ");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.CHANNEL_READ);
         assertThat(session.getChatId()).isEqualTo(300L);
         assertThat(session.getChatTitle()).isEqualTo("Pending Channel");
     }
@@ -301,7 +303,7 @@ class TelegramBotServiceTest {
 
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
-        session.setStatus("STARTED");
+        session.setStatus(TelegramVerificationStatus.STARTED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
         when(applicationRepo.findFirstByPhoneOrderByCreatedAtDesc("+998901234567"))
                 .thenReturn(Optional.of(new CreatorApplication()));
@@ -311,7 +313,7 @@ class TelegramBotServiceTest {
 
         service.handleUpdate(contactUpdate(userId, 200L, "998901234567"));
 
-        assertThat(session.getStatus()).isEqualTo("PHONE_LINKED"); // not CHANNEL_READ until they pick one
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.PHONE_LINKED); // not CHANNEL_READ until they pick one
         ArgumentCaptor<SendMessage> msgCap = ArgumentCaptor.forClass(SendMessage.class);
         verify(client, atLeastOnce()).execute(msgCap.capture());
         SendMessage picker = msgCap.getAllValues().stream()
@@ -350,7 +352,7 @@ class TelegramBotServiceTest {
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(100L);
         session.setPhone("+998901234567");
-        session.setStatus("VERIFIED");
+        session.setStatus(TelegramVerificationStatus.VERIFIED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.of(session));
 
         service.handleUpdate(checkCommandUpdate(100L, 200L));
@@ -363,7 +365,7 @@ class TelegramBotServiceTest {
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(100L);
         session.setPhone("+998901234567");
-        session.setStatus("PHONE_LINKED");
+        session.setStatus(TelegramVerificationStatus.PHONE_LINKED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.of(session));
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(botChatRepo.findByTelegramUserIdOrderByCreatedAtDesc(100L))
@@ -371,7 +373,7 @@ class TelegramBotServiceTest {
 
         service.handleUpdate(checkCommandUpdate(100L, 200L));
 
-        assertThat(session.getStatus()).isEqualTo("CHANNEL_READ");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.CHANNEL_READ);
         assertThat(session.getChatId()).isEqualTo(300L);
     }
 
@@ -384,14 +386,14 @@ class TelegramBotServiceTest {
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
         session.setPhone("+998901234567");
-        session.setStatus("STARTED");
+        session.setStatus(TelegramVerificationStatus.STARTED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(botChatRepo.findByChatId(301L)).thenReturn(Optional.of(botChat(userId, 301L, "Channel B")));
 
         service.handleUpdate(callbackUpdate(userId, "select_chat:301"));
 
-        assertThat(session.getStatus()).isEqualTo("CHANNEL_READ");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.CHANNEL_READ);
         assertThat(session.getChatId()).isEqualTo(301L);
         assertThat(session.getChatTitle()).isEqualTo("Channel B");
     }
@@ -403,13 +405,13 @@ class TelegramBotServiceTest {
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
         session.setPhone("+998901234567");
-        session.setStatus("STARTED");
+        session.setStatus(TelegramVerificationStatus.STARTED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
         when(botChatRepo.findByChatId(301L)).thenReturn(Optional.of(botChat(999L, 301L, "Someone Else's Channel")));
 
         service.handleUpdate(callbackUpdate(userId, "select_chat:301"));
 
-        assertThat(session.getStatus()).isEqualTo("STARTED");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.STARTED);
         verify(repo, never()).save(any());
     }
 
@@ -464,14 +466,14 @@ class TelegramBotServiceTest {
     @Test
     void myChatMember_sessionNotPhoneLinked_recordsChatAndPromptsStart() throws TelegramApiException {
         TelegramVerification session = new TelegramVerification();
-        session.setStatus("STARTED");
+        session.setStatus(TelegramVerificationStatus.STARTED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(100L)).thenReturn(Optional.of(session));
         stubSuccessfulChatFetch("administrator", 10, "My Channel");
 
         service.handleUpdate(myChatMemberUpdate(100L, 300L, "administrator"));
 
         verify(botChatRepo).save(any(TelegramBotChat.class));
-        assertThat(session.getStatus()).isEqualTo("STARTED"); // unchanged — not reconciled yet
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.STARTED); // unchanged — not reconciled yet
         ArgumentCaptor<SendMessage> captor = ArgumentCaptor.forClass(SendMessage.class);
         verify(client).execute(captor.capture());
         assertThat(captor.getValue().getText()).contains("/start");
@@ -492,7 +494,7 @@ class TelegramBotServiceTest {
 
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
-        session.setStatus("PHONE_LINKED");
+        session.setStatus(TelegramVerificationStatus.PHONE_LINKED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
 
         ChatMember member = mock(ChatMember.class);
@@ -509,11 +511,11 @@ class TelegramBotServiceTest {
 
         service.handleUpdate(myChatMemberUpdate(userId, channelId, "administrator"));
 
-        assertThat(session.getStatus()).isEqualTo("CHANNEL_READ");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.CHANNEL_READ);
         assertThat(session.getChatId()).isEqualTo(channelId);
         assertThat(session.getSubscribers()).isEqualTo(1500);
         assertThat(session.getChatTitle()).isEqualTo("My Channel");
-        assertThat(session.getOwnerStatus()).isEqualTo("creator");
+        assertThat(session.getOwnerStatus()).isEqualTo(TelegramOwnerStatus.creator);
         verify(repo).save(session);
     }
 
@@ -523,7 +525,7 @@ class TelegramBotServiceTest {
 
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
-        session.setStatus("PHONE_LINKED");
+        session.setStatus(TelegramVerificationStatus.PHONE_LINKED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
 
         ChatMember member = mock(ChatMember.class);
@@ -538,7 +540,7 @@ class TelegramBotServiceTest {
 
         service.handleUpdate(myChatMemberUpdate(userId, 300L, "creator"));
 
-        assertThat(session.getStatus()).isEqualTo("CHANNEL_READ");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.CHANNEL_READ);
     }
 
     @Test
@@ -547,7 +549,7 @@ class TelegramBotServiceTest {
 
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
-        session.setStatus("PHONE_LINKED");
+        session.setStatus(TelegramVerificationStatus.PHONE_LINKED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
 
         ChatMember member = mock(ChatMember.class);
@@ -556,7 +558,7 @@ class TelegramBotServiceTest {
 
         service.handleUpdate(myChatMemberUpdate(userId, 300L, "administrator"));
 
-        assertThat(session.getStatus()).isEqualTo("PHONE_LINKED"); // unchanged
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.PHONE_LINKED); // unchanged
         ArgumentCaptor<SendMessage> msgCap = ArgumentCaptor.forClass(SendMessage.class);
         verify(client).execute(msgCap.capture());
         assertThat(msgCap.getValue().getText()).contains("admin emassiz");
@@ -568,14 +570,14 @@ class TelegramBotServiceTest {
 
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
-        session.setStatus("PHONE_LINKED");
+        session.setStatus(TelegramVerificationStatus.PHONE_LINKED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
         when(client.execute(any(GetChatMember.class))).thenThrow(new TelegramApiException("API error"));
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.handleUpdate(myChatMemberUpdate(userId, 300L, "administrator"));
 
-        assertThat(session.getStatus()).isEqualTo("FAILED");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.FAILED);
         verify(repo).save(session);
         ArgumentCaptor<SendMessage> msgCap = ArgumentCaptor.forClass(SendMessage.class);
         verify(client).execute(msgCap.capture());
@@ -605,7 +607,7 @@ class TelegramBotServiceTest {
         long userId = 100L;
 
         TelegramVerification session = new TelegramVerification();
-        session.setStatus("SUBMITTED");
+        session.setStatus(TelegramVerificationStatus.STARTED);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
 
         service.handleUpdate(callbackUpdate(userId, "confirm_verification"));
@@ -621,13 +623,13 @@ class TelegramBotServiceTest {
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
         session.setChatId(channelId);
-        session.setStatus("CHANNEL_READ");
+        session.setStatus(TelegramVerificationStatus.CHANNEL_READ);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.handleUpdate(callbackUpdate(userId, "confirm_verification"));
 
-        assertThat(session.getStatus()).isEqualTo("VERIFIED");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.VERIFIED);
         assertThat(session.getVerifiedAt()).isNotNull();
         verify(client).execute(any(LeaveChat.class));
     }
@@ -639,13 +641,13 @@ class TelegramBotServiceTest {
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
         session.setChatId(null);
-        session.setStatus("CHANNEL_READ");
+        session.setStatus(TelegramVerificationStatus.CHANNEL_READ);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.handleUpdate(callbackUpdate(userId, "confirm_verification"));
 
-        assertThat(session.getStatus()).isEqualTo("VERIFIED");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.VERIFIED);
         verify(client, never()).execute(any(LeaveChat.class));
     }
 
@@ -656,7 +658,7 @@ class TelegramBotServiceTest {
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(userId);
         session.setChatId(300L);
-        session.setStatus("CHANNEL_READ");
+        session.setStatus(TelegramVerificationStatus.CHANNEL_READ);
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(client.execute(any(LeaveChat.class))).thenThrow(new TelegramApiException("Network error"));
@@ -664,7 +666,7 @@ class TelegramBotServiceTest {
         service.handleUpdate(callbackUpdate(userId, "confirm_verification"));
 
         // Leaving the channel is best-effort cleanup — a failure must not un-verify.
-        assertThat(session.getStatus()).isEqualTo("VERIFIED");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.VERIFIED);
     }
 
     // ===== Full state machine: STARTED → PHONE_LINKED → CHANNEL_READ → SUBMITTED → DONE =====
@@ -682,7 +684,7 @@ class TelegramBotServiceTest {
         ArgumentCaptor<TelegramVerification> startCap = ArgumentCaptor.forClass(TelegramVerification.class);
         verify(repo, atLeastOnce()).save(startCap.capture());
         TelegramVerification session = startCap.getValue();
-        assertThat(session.getStatus()).isEqualTo("STARTED");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.STARTED);
 
         // Step 2: contact phone
         reset(repo, client, applicationRepo);
@@ -692,7 +694,7 @@ class TelegramBotServiceTest {
                 .thenReturn(Optional.of(new CreatorApplication()));
 
         service.handleUpdate(contactUpdate(userId, chatId, "998901234567"));
-        assertThat(session.getStatus()).isEqualTo("PHONE_LINKED");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.PHONE_LINKED);
 
         // Step 3: my_chat_member — bot added as admin
         reset(repo, client);
@@ -708,7 +710,7 @@ class TelegramBotServiceTest {
         when(client.execute(any(GetChat.class))).thenReturn(channelInfo);
 
         service.handleUpdate(myChatMemberUpdate(userId, channelId, "administrator"));
-        assertThat(session.getStatus()).isEqualTo("CHANNEL_READ");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.CHANNEL_READ);
         assertThat(session.getChatId()).isEqualTo(channelId);
 
         // Step 4: confirm_verification callback
@@ -717,7 +719,7 @@ class TelegramBotServiceTest {
         when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
 
         service.handleUpdate(callbackUpdate(userId, "confirm_verification"));
-        assertThat(session.getStatus()).isEqualTo("VERIFIED");
+        assertThat(session.getStatus()).isEqualTo(TelegramVerificationStatus.VERIFIED);
         assertThat(session.getVerifiedAt()).isNotNull();
         verify(client).execute(any(LeaveChat.class));
     }

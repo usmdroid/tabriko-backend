@@ -26,6 +26,9 @@ import uz.tabriko.repository.ApplicationMessageRepository;
 import uz.tabriko.repository.CreatorApplicationRepository;
 import uz.tabriko.telegram.entity.TelegramBotChat;
 import uz.tabriko.telegram.entity.TelegramVerification;
+import uz.tabriko.telegram.enums.TelegramChatType;
+import uz.tabriko.telegram.enums.TelegramOwnerStatus;
+import uz.tabriko.telegram.enums.TelegramVerificationStatus;
 import uz.tabriko.telegram.repository.TelegramBotChatRepository;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
 
@@ -80,7 +83,7 @@ public class TelegramBotService {
 
         TelegramVerification session = new TelegramVerification();
         session.setTelegramUserId(telegramUserId);
-        session.setStatus("STARTED");
+        session.setStatus(TelegramVerificationStatus.STARTED);
         repo.save(session);
 
         KeyboardButton contactBtn = new KeyboardButton("Raqamni ulashish");
@@ -106,7 +109,7 @@ public class TelegramBotService {
 
         TelegramVerification session = repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(telegramUserId)
             .orElse(null);
-        if (session == null || !"STARTED".equals(session.getStatus())) {
+        if (session == null || session.getStatus() != TelegramVerificationStatus.STARTED) {
             sendText(chatId, "Iltimos /start buyrug'ini yuboring.");
             return;
         }
@@ -118,14 +121,14 @@ public class TelegramBotService {
         // submitted creator application by phone instead.
         boolean hasApplication = applicationRepo.findFirstByPhoneOrderByCreatedAtDesc(phone).isPresent();
         if (hasApplication) {
-            session.setStatus("PHONE_LINKED");
+            session.setStatus(TelegramVerificationStatus.PHONE_LINKED);
         } else {
-            session.setStatus("FAILED");
+            session.setStatus(TelegramVerificationStatus.FAILED);
         }
         session.setUpdatedAt(Instant.now());
         repo.save(session);
 
-        if ("PHONE_LINKED".equals(session.getStatus())) {
+        if (session.getStatus() == TelegramVerificationStatus.PHONE_LINKED) {
             sendText(chatId, "Raqamingiz tasdiqlandi");
             reconcilePendingChats(session);
         } else {
@@ -148,7 +151,7 @@ public class TelegramBotService {
             sendText(chatId, "Avval /start bosib, telefon raqamingizni ulashing.");
             return;
         }
-        if ("VERIFIED".equals(session.getStatus())) {
+        if (session.getStatus() == TelegramVerificationStatus.VERIFIED) {
             sendText(chatId, "Tekshiruv allaqachon yakunlangan. Rahmat!");
             return;
         }
@@ -227,6 +230,29 @@ public class TelegramBotService {
         return new ChatSnapshot(chatId, chatInfo.getTitle(), chatInfo.getUserName(), chatType, count, ownerStatus);
     }
 
+    // TelegramBotChat keeps raw Telegram API strings (out of scope for enum conversion);
+    // TelegramVerification stores the typed enum, so unrecognized/legacy values are dropped
+    // defensively instead of failing verification.
+    private TelegramChatType parseChatType(String raw) {
+        if (raw == null) return null;
+        try {
+            return TelegramChatType.valueOf(raw);
+        } catch (IllegalArgumentException e) {
+            log.warn("Unrecognized Telegram chat type '{}', leaving unset", raw);
+            return null;
+        }
+    }
+
+    private TelegramOwnerStatus parseOwnerStatus(String raw) {
+        if (raw == null) return null;
+        try {
+            return TelegramOwnerStatus.valueOf(raw);
+        } catch (IllegalArgumentException e) {
+            log.warn("Unrecognized Telegram owner status '{}', leaving unset", raw);
+            return null;
+        }
+    }
+
     private void upsertBotChat(Long telegramUserId, ChatSnapshot snapshot) {
         TelegramBotChat botChat = botChatRepo.findByChatId(snapshot.chatId()).orElseGet(TelegramBotChat::new);
         botChat.setTelegramUserId(telegramUserId);
@@ -268,7 +294,7 @@ public class TelegramBotService {
         } catch (TelegramApiException e) {
             log.error("Error reading channel info for telegramUserId={}, chatId={}", telegramUserId, chatId, e);
             if (session != null) {
-                session.setStatus("FAILED");
+                session.setStatus(TelegramVerificationStatus.FAILED);
                 session.setUpdatedAt(Instant.now());
                 repo.save(session);
             }
@@ -282,7 +308,7 @@ public class TelegramBotService {
 
         upsertBotChat(telegramUserId, snapshot);
 
-        if (session != null && "PHONE_LINKED".equals(session.getStatus())) {
+        if (session != null && session.getStatus() == TelegramVerificationStatus.PHONE_LINKED) {
             applyChatToSession(session, snapshot);
         } else {
             log.info("Recorded bot admin promotion for telegramUserId={}, chatId={} (session not ready: {})",
@@ -299,10 +325,10 @@ public class TelegramBotService {
         session.setChatId(snapshot.chatId());
         session.setChatUsername(snapshot.username());
         session.setChatTitle(snapshot.title());
-        session.setChatType(snapshot.type());
+        session.setChatType(parseChatType(snapshot.type()));
         session.setSubscribers(snapshot.subscribers());
-        session.setOwnerStatus(snapshot.ownerStatus());
-        session.setStatus("CHANNEL_READ");
+        session.setOwnerStatus(parseOwnerStatus(snapshot.ownerStatus()));
+        session.setStatus(TelegramVerificationStatus.CHANNEL_READ);
         session.setUpdatedAt(Instant.now());
         repo.save(session);
 
@@ -358,9 +384,9 @@ public class TelegramBotService {
 
         TelegramVerification session = repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(telegramUserId)
             .orElse(null);
-        if (session == null || !"CHANNEL_READ".equals(session.getStatus())) return;
+        if (session == null || session.getStatus() != TelegramVerificationStatus.CHANNEL_READ) return;
 
-        session.setStatus("VERIFIED");
+        session.setStatus(TelegramVerificationStatus.VERIFIED);
         session.setVerifiedAt(Instant.now());
         session.setUpdatedAt(Instant.now());
         repo.save(session);

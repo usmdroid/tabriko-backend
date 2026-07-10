@@ -43,6 +43,7 @@ public class CreatorService {
     private final WalletService walletService;
     private final UserMapper mapper;
 
+    @Transactional(readOnly = true)
     public CreatorSelfProfileResponse getSelfProfile(UUID creatorId) {
         CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
             .orElseThrow(() -> ApiException.notFound("Creator profile not found"));

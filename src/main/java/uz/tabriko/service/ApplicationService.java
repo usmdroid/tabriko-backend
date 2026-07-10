@@ -28,6 +28,7 @@ import uz.tabriko.infrastructure.firebase.OtpService;
 import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.repository.*;
 import uz.tabriko.security.UserPrincipal;
+import uz.tabriko.telegram.enums.TelegramVerificationStatus;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
 import uz.tabriko.telegram.service.TelegramBotService;
 
@@ -449,12 +450,12 @@ public class ApplicationService {
                 tv = telegramVerificationRepo.findFirstByPhoneOrderByCreatedAtDesc(app.getPhone()).orElse(null);
             }
             if (tv != null) {
-                tg.setVerified("VERIFIED".equals(tv.getStatus()));
+                tg.setVerified(tv.getStatus() == TelegramVerificationStatus.VERIFIED);
                 tg.setChannelName(tv.getChatTitle());
                 tg.setChannelUsername(tv.getChatUsername());
                 tg.setSubscribers(tv.getSubscribers());
-                tg.setOwnerStatus(tv.getOwnerStatus());
-                tg.setChatType(tv.getChatType());
+                tg.setOwnerStatus(tv.getOwnerStatus() != null ? tv.getOwnerStatus().name() : null);
+                tg.setChatType(tv.getChatType() != null ? tv.getChatType().name() : null);
             }
             // verified=false and all fields null when no linked record
             v.setTelegram(tg);

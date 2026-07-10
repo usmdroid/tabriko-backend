@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.CreatorProfile;
 import uz.tabriko.domain.entity.PortfolioItem;
@@ -16,6 +17,7 @@ import uz.tabriko.repository.CreatorProfileRepository;
 import uz.tabriko.repository.PortfolioItemRepository;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -34,39 +36,49 @@ public class CatalogService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public PageResponse<CreatorResponse> getCreators(Long categoryId, String search, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         String normalizedSearch = (search == null || search.isBlank()) ? null : search.trim();
         String searchPattern = normalizedSearch == null ? null : "%" + normalizedSearch.toLowerCase() + "%";
         Page<CreatorProfile> profiles = creatorProfileRepo.findAllFiltered(categoryId, normalizedSearch, searchPattern, pageable);
-        return PageResponse.of(profiles, cp -> {
-            List<PortfolioItem> portfolio = portfolioRepo.findPublicWithConsent(cp.getUserId());
-            return mapper.toCreatorResponse(cp, portfolio);
-        });
+        Map<UUID, List<PortfolioItem>> portfolioByCreator = groupPortfolioByCreator(profiles.getContent());
+        return PageResponse.of(profiles, cp -> mapper.toCreatorResponse(
+                cp, portfolioByCreator.getOrDefault(cp.getUserId(), List.of())));
     }
 
+    @Transactional(readOnly = true)
     public List<CreatorResponse> getTopCreators() {
-        return creatorProfileRepo.findTop10().stream()
-                .map(cp -> {
-                    List<PortfolioItem> portfolio = portfolioRepo.findPublicWithConsent(cp.getUserId());
-                    return mapper.toCreatorResponse(cp, portfolio);
-                })
+        List<CreatorProfile> creators = creatorProfileRepo.findTop10();
+        Map<UUID, List<PortfolioItem>> portfolioByCreator = groupPortfolioByCreator(creators);
+        return creators.stream()
+                .map(cp -> mapper.toCreatorResponse(cp, portfolioByCreator.getOrDefault(cp.getUserId(), List.of())))
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public List<CreatorResponse> getForYouCreators(int limit) {
-        return creatorProfileRepo.findForYou(PageRequest.of(0, limit)).stream()
-                .map(cp -> {
-                    List<PortfolioItem> portfolio = portfolioRepo.findPublicWithConsent(cp.getUserId());
-                    return mapper.toCreatorResponse(cp, portfolio);
-                })
+        List<CreatorProfile> creators = creatorProfileRepo.findForYou(PageRequest.of(0, limit));
+        Map<UUID, List<PortfolioItem>> portfolioByCreator = groupPortfolioByCreator(creators);
+        return creators.stream()
+                .map(cp -> mapper.toCreatorResponse(cp, portfolioByCreator.getOrDefault(cp.getUserId(), List.of())))
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public CreatorResponse getCreator(UUID creatorId) {
         CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
                 .orElseThrow(() -> ApiException.notFound("Creator not found"));
         List<PortfolioItem> portfolio = portfolioRepo.findPublicWithConsent(creatorId);
         return mapper.toCreatorResponse(cp, portfolio);
+    }
+
+    private Map<UUID, List<PortfolioItem>> groupPortfolioByCreator(List<CreatorProfile> creators) {
+        if (creators.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> creatorIds = creators.stream().map(CreatorProfile::getUserId).collect(Collectors.toList());
+        return portfolioRepo.findPublicWithConsentByCreatorIds(creatorIds).stream()
+                .collect(Collectors.groupingBy(p -> p.getCreator().getId()));
     }
 }

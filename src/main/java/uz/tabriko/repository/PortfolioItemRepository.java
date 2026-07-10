@@ -6,6 +6,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import uz.tabriko.domain.entity.PortfolioItem;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,4 +21,9 @@ public interface PortfolioItemRepository extends JpaRepository<PortfolioItem, Lo
     @Query("SELECT p FROM PortfolioItem p WHERE p.creator.id = :creatorId AND p.isPublic = true " +
            "AND (p.order IS NULL OR p.order.portfolioConsent = true)")
     List<PortfolioItem> findPublicWithConsent(@Param("creatorId") UUID creatorId);
+
+    // Batch variant of findPublicWithConsent to avoid N+1 when rendering a list of creators
+    @Query("SELECT p FROM PortfolioItem p WHERE p.creator.id IN :creatorIds AND p.isPublic = true " +
+           "AND (p.order IS NULL OR p.order.portfolioConsent = true)")
+    List<PortfolioItem> findPublicWithConsentByCreatorIds(@Param("creatorIds") Collection<UUID> creatorIds);
 }

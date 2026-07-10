@@ -145,9 +145,12 @@ public class AdminController {
     // --- Creators ---
 
     @GetMapping("/creators")
-    @Operation(summary = "List all creators (admin)")
-    public ResponseEntity<BaseResponse<?>> listCreators() {
-        return ResponseEntity.ok(BaseResponse.ok(adminService.getAllCreators()));
+    @Operation(summary = "List all creators (admin), bounded and paginated")
+    public ResponseEntity<BaseResponse<?>> listCreators(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "200") int size
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.getAllCreators(page, size)));
     }
 
     @PostMapping("/creators")

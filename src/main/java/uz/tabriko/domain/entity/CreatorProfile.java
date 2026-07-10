@@ -3,6 +3,7 @@ package uz.tabriko.domain.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 import uz.tabriko.domain.enums.CreatorTier;
 import uz.tabriko.domain.enums.OrderOption;
 
@@ -94,7 +95,11 @@ public class CreatorProfile {
     @Column(name = "passport_number", length = 7)
     private String passportNumber;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    // LAZY + batch fetching: avoids N+1 across lists of creators without breaking
+    // pagination (unlike an @EntityGraph collection fetch, which forces in-memory
+    // pagination in Hibernate). Callers must run within a transaction to read this.
+    @ElementCollection(fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
     @CollectionTable(
         name = "creator_profile_options",
         joinColumns = @JoinColumn(name = "creator_id")

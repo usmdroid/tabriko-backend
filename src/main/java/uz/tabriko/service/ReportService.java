@@ -39,6 +39,7 @@ public class ReportService {
         return mapper.toReportResponse(report);
     }
 
+    @Transactional(readOnly = true)
     public PageResponse<ReportResponse> getReports(ReportStatus status, int page, int size) {
         var pageable = PageRequest.of(page, size);
         if (status != null) {
