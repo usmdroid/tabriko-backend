@@ -2,16 +2,19 @@ package uz.tabriko.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import uz.tabriko.common.response.BaseResponse;
+import uz.tabriko.common.util.PhoneUtil;
 import uz.tabriko.dto.request.LoginRequest;
 import uz.tabriko.dto.request.RefreshTokenRequest;
 import uz.tabriko.dto.request.RegisterRequest;
 import uz.tabriko.dto.request.ResetPasswordRequest;
 import uz.tabriko.dto.request.SendOtpRequest;
+import uz.tabriko.infrastructure.ratelimit.OtpRateLimiter;
 import uz.tabriko.service.AuthService;
 
 @RestController
@@ -21,12 +24,22 @@ import uz.tabriko.service.AuthService;
 public class AuthController {
 
     private final AuthService authService;
+    private final OtpRateLimiter otpRateLimiter;
 
     @PostMapping("/send-otp")
     @Operation(summary = "Send OTP to phone (used for register and reset-password)")
-    public ResponseEntity<BaseResponse<Void>> sendOtp(@Valid @RequestBody SendOtpRequest req) {
+    public ResponseEntity<BaseResponse<Void>> sendOtp(@Valid @RequestBody SendOtpRequest req, HttpServletRequest request) {
+        otpRateLimiter.checkAndRecord(PhoneUtil.normalize(req.getPhone()), clientIp(request));
         authService.sendOtp(req);
         return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    private String clientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     @PostMapping("/register")

@@ -45,6 +45,9 @@ class AdminServiceTest {
     @Mock PortfolioItemRepository portfolioRepo;
     @Mock ReportRepository reportRepo;
     @Mock PlatformSettingsRepository settingsRepo;
+    @Mock uz.tabriko.repository.WalletTransactionRepository walletTxRepo;
+    @Mock uz.tabriko.infrastructure.payment.PaymentGateway paymentGateway;
+    @Mock NotificationService notificationService;
     @Mock UserMapper mapper;
 
     @InjectMocks AdminService adminService;
@@ -61,6 +64,49 @@ class AdminServiceTest {
         clientUser.setPhone("+998901234567");
         clientUser.setRole(Role.CLIENT);
         clientUser.setStatus(UserStatus.ACTIVE);
+    }
+
+    // ===== POST /admin/orders/{id}/refund — B1: must not double-pay an ACCEPTED order =====
+
+    @Test
+    void refundOrder_acceptedOrder_throwsBadRequest_doesNotRefund() {
+        uz.tabriko.domain.entity.Order order = new uz.tabriko.domain.entity.Order();
+        UUID orderId = UUID.randomUUID();
+        order.setId(orderId);
+        order.setClient(clientUser);
+        order.setPrice(new java.math.BigDecimal("100.00"));
+        order.setStatus(OrderStatus.ACCEPTED);
+
+        when(orderRepo.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> adminService.refundOrder(orderId))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("already accepted");
+
+        verify(paymentGateway, never()).refund(any(), any(), any());
+        verify(walletTxRepo, never()).save(any());
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.ACCEPTED);
+    }
+
+    @Test
+    void refundOrder_deliveredOrder_refundsClient() {
+        uz.tabriko.domain.entity.Order order = new uz.tabriko.domain.entity.Order();
+        UUID orderId = UUID.randomUUID();
+        order.setId(orderId);
+        order.setClient(clientUser);
+        order.setPrice(new java.math.BigDecimal("100.00"));
+        order.setStatus(OrderStatus.DELIVERED);
+
+        when(orderRepo.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+        when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(paymentGateway.refund(any(), any(), any()))
+                .thenReturn(uz.tabriko.infrastructure.payment.PaymentResult.ok("mock-tx"));
+
+        adminService.refundOrder(orderId);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.REFUNDED);
+        verify(paymentGateway).refund(eq(clientId), eq(new java.math.BigDecimal("100.00")), eq(orderId));
+        verify(walletTxRepo).save(any());
     }
 
     // ===== POST /admin/creators — addCreator stores tier =====
@@ -94,6 +140,38 @@ class AdminServiceTest {
         ArgumentCaptor<CreatorProfile> cpCap = ArgumentCaptor.forClass(CreatorProfile.class);
         verify(creatorProfileRepo).save(cpCap.capture());
         assertThat(cpCap.getValue().getTier()).isEqualTo(CreatorTier.TOP);
+    }
+
+    @Test
+    void addCreator_rawPhoneFormat_normalizesForLookupAndSave() {
+        UUID creatorUserId = UUID.randomUUID();
+
+        when(userRepo.findByPhone("+998901234567")).thenReturn(Optional.empty());
+        when(userRepo.save(any(User.class))).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            if (u.getId() == null) u.setId(creatorUserId);
+            return u;
+        });
+
+        Category cat = new Category();
+        cat.setId(1L);
+        when(categoryRepo.findById(1L)).thenReturn(Optional.of(cat));
+        when(creatorProfileRepo.findByUserId(any())).thenReturn(Optional.empty());
+        when(creatorProfileRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(portfolioRepo.findPublicWithConsent(any())).thenReturn(List.of());
+
+        AddCreatorRequest req = new AddCreatorRequest();
+        req.setPhone("998 90 123-45-67");
+        req.setName("Star Creator");
+        req.setCategoryId(1L);
+
+        adminService.addCreator(req);
+
+        // Looked up and saved under the normalized phone, not the raw input
+        verify(userRepo).findByPhone("+998901234567");
+        ArgumentCaptor<User> userCap = ArgumentCaptor.forClass(User.class);
+        verify(userRepo, atLeastOnce()).save(userCap.capture());
+        assertThat(userCap.getAllValues()).allSatisfy(u -> assertThat(u.getPhone()).isEqualTo("+998901234567"));
     }
 
     // ===== GET /admin/users =====

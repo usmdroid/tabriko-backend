@@ -54,11 +54,20 @@ app:
   commission-percent: ${COMMISSION_PERCENT:15}
 
   payment:
-    # TODO: enable and verify HMAC signature from provider before enabling in production
     callback-enabled: ${PAYMENT_CALLBACK_ENABLED:false}
+    # Shared secret used to verify the payment provider's HMAC-SHA256 callback signature.
+    # Must be set (via env) before enabling callback-enabled in production.
+    callback-secret: ${PAYMENT_CALLBACK_SECRET:}
 
   firebase:
     credentials-path: ${FIREBASE_CREDENTIALS_PATH:}  # empty = mock mode
+
+  otp:
+    rate-limit:
+      per-phone-max: ${OTP_RATE_LIMIT_PER_PHONE:3}
+      per-phone-window-seconds: ${OTP_RATE_LIMIT_PHONE_WINDOW_SECONDS:60}
+      per-ip-max: ${OTP_RATE_LIMIT_PER_IP:10}
+      per-ip-window-seconds: ${OTP_RATE_LIMIT_IP_WINDOW_SECONDS:900}
 
   telegram:
     bot-token: ${TELEGRAM_BOT_TOKEN:}

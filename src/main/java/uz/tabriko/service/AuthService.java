@@ -6,6 +6,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
+import uz.tabriko.common.util.PhoneUtil;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.enums.Role;
 import uz.tabriko.domain.enums.UserStatus;
@@ -33,15 +34,18 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
 
     public void sendOtp(SendOtpRequest req) {
-        otpService.sendOtp(req.getPhone());
+        // Normalized so the OTP is stored under the same key that register/login/resetPassword
+        // will look it up with, regardless of the raw format the client sent.
+        otpService.sendOtp(PhoneUtil.normalize(req.getPhone()));
     }
 
     @Transactional
     public AuthResponse register(RegisterRequest req) {
-        if (!otpService.verifyOtp(req.getPhone(), req.getCode())) {
+        String phone = PhoneUtil.normalize(req.getPhone());
+        if (!otpService.verifyOtp(phone, req.getCode())) {
             throw ApiException.badRequest("Invalid OTP code");
         }
-        User user = userRepo.findByPhone(req.getPhone()).orElse(null);
+        User user = userRepo.findByPhone(phone).orElse(null);
         if (user != null && user.getPasswordHash() != null) {
             throw ApiException.conflict("Bu telefon raqami allaqachon ro'yxatdan o'tgan");
         }
@@ -51,7 +55,7 @@ public class AuthService {
         }
         if (user == null) {
             user = new User();
-            user.setPhone(req.getPhone());
+            user.setPhone(phone);
             user.setName(req.getName());
             user.setRole(Role.CLIENT);
             user.setStatus(UserStatus.ACTIVE);
@@ -65,7 +69,8 @@ public class AuthService {
         // Generic error for user-not-found, blocked account, wrong password, or no password set.
         // The BLOCKED check is folded into the same generic failure so login cannot be used as a
         // password oracle for blocked accounts (401 for every failure, never a distinct 403).
-        User user = userRepo.findByPhone(req.getPhone()).orElse(null);
+        String phone = PhoneUtil.normalize(req.getPhone());
+        User user = userRepo.findByPhone(phone).orElse(null);
         if (user == null
                 || user.getStatus() == UserStatus.BLOCKED
                 || user.getPasswordHash() == null
@@ -77,11 +82,12 @@ public class AuthService {
 
     @Transactional
     public AuthResponse resetPassword(ResetPasswordRequest req) {
+        String phone = PhoneUtil.normalize(req.getPhone());
         // OTP verified before user lookup to prevent phone-number enumeration
-        if (!otpService.verifyOtp(req.getPhone(), req.getCode())) {
+        if (!otpService.verifyOtp(phone, req.getCode())) {
             throw ApiException.badRequest("Invalid OTP code");
         }
-        User user = userRepo.findByPhone(req.getPhone())
+        User user = userRepo.findByPhone(phone)
                 .orElseThrow(() -> ApiException.notFound("User not found"));
         // A blocked account must not be able to re-enable itself via password reset.
         if (user.getStatus() == UserStatus.BLOCKED) {

@@ -1,10 +1,12 @@
 package uz.tabriko.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
+import uz.tabriko.common.util.HmacUtil;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.entity.WalletTransaction;
 import uz.tabriko.domain.enums.OrderStatus;
@@ -38,6 +40,12 @@ public class WalletService {
     private final PaymentProvider paymentProvider;
     private final UserMapper mapper;
 
+    @Value("${app.commission-percent:15}")
+    private int commissionPercent;
+
+    @Value("${app.payment.callback-secret:}")
+    private String callbackSecret;
+
     private static final List<TransactionType> CREDIT_TYPES =
         List.of(TransactionType.TOPUP, TransactionType.DEPOSIT, TransactionType.REFUND, TransactionType.RELEASE);
 
@@ -57,6 +65,18 @@ public class WalletService {
     // Hold = HOLD txs linked to still-active orders
     public BigDecimal getHold(UUID userId) {
         return walletTxRepo.computeActiveHold(userId, TransactionType.HOLD, ACTIVE_ORDER_STATUSES);
+    }
+
+    // Available balance = balance minus funds already reserved by a PENDING withdrawal
+    // minus funds still locked in an active order hold. Used to gate new withdrawals so
+    // a user cannot request multiple payouts against the same funds before the first is
+    // settled (getBalance() alone does not reflect PENDING withdrawals).
+    public BigDecimal getAvailableBalance(UUID userId) {
+        BigDecimal balance = getBalance(userId);
+        BigDecimal pendingWithdraw = walletTxRepo.sumByUserAndStatusAndTypes(
+            userId, TransactionStatus.PENDING, List.of(TransactionType.WITHDRAW));
+        BigDecimal activeHold = getHold(userId);
+        return balance.subtract(pendingWithdraw).subtract(activeHold).max(BigDecimal.ZERO);
     }
 
     public WalletResponse getWallet(UUID userId, int page, int size) {
@@ -96,7 +116,8 @@ public class WalletService {
 
     @Transactional
     public void handleCallback(WalletCallbackRequest req) {
-        // TODO: verify HMAC signature from payment provider before trusting this call
+        verifyCallbackSignature(req);
+
         WalletTransaction tx = walletTxRepo.findById(req.getTransactionId())
             .orElseThrow(() -> ApiException.notFound("Transaction not found"));
 
@@ -114,14 +135,28 @@ public class WalletService {
         walletTxRepo.save(tx);
     }
 
+    // Verifies the provider's HMAC-SHA256 signature over "transactionId:amount:providerRef"
+    // using the shared app.payment.callback-secret, so an attacker who knows a transactionId
+    // cannot forge a completion callback.
+    private void verifyCallbackSignature(WalletCallbackRequest req) {
+        if (callbackSecret == null || callbackSecret.isBlank()) {
+            throw ApiException.unauthorized("Payment callback is not configured");
+        }
+        String payload = req.getTransactionId() + ":" + req.getAmount().toPlainString() + ":" + req.getProviderRef();
+        String expected = HmacUtil.sha256Hex(payload, callbackSecret);
+        if (!HmacUtil.constantTimeEquals(expected, req.getSignature())) {
+            throw ApiException.unauthorized("Invalid payment callback signature");
+        }
+    }
+
     @Transactional
     public void withdraw(UUID userId, WithdrawRequest req) {
         // Pessimistic lock on user row prevents concurrent double-spend
         User user = userRepo.findByIdForUpdate(userId)
             .orElseThrow(() -> ApiException.notFound("User not found"));
 
-        BigDecimal balance = getBalance(userId);
-        if (balance.compareTo(req.getAmount()) < 0) {
+        BigDecimal available = getAvailableBalance(userId);
+        if (available.compareTo(req.getAmount()) < 0) {
             throw ApiException.badRequest("Insufficient balance");
         }
 
@@ -139,10 +174,9 @@ public class WalletService {
             creatorId, TransactionType.RELEASE, TransactionStatus.COMPLETED);
 
         // Pending = estimated net payout for active orders (price * (100 - commission) / 100)
-        // Commission is 15% by default; use sum of order prices as approximation
         BigDecimal activePriceSum = orderRepo.sumPriceByCreatorAndStatuses(creatorId, ACTIVE_ORDER_STATUSES);
         BigDecimal pendingPayout = activePriceSum
-            .multiply(BigDecimal.valueOf(85))
+            .multiply(BigDecimal.valueOf(100 - commissionPercent))
             .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
 
         BigDecimal withdrawn = walletTxRepo.sumByUserAndTypeAndStatus(

@@ -168,13 +168,13 @@ class MediaServiceTest {
 
         when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
         when(deliveryRepo.findByOrderId(orderId)).thenReturn(Optional.of(delivery));
-        when(mediaStorage.signedUrl(eq("watermarked://url"), anyLong()))
+        when(mediaStorage.signedUrl(eq("watermarked://url"), eq(clientId), anyLong()))
             .thenReturn("signed://watermarked");
 
         SignedUrlResponse resp = mediaService.getDownloadUrl(clientId, orderId);
 
         assertThat(resp.getUrl()).isEqualTo("signed://watermarked");
-        verify(mediaStorage).signedUrl("watermarked://url", 3600L);
+        verify(mediaStorage).signedUrl("watermarked://url", clientId, 3600L);
     }
 
     @Test
@@ -184,13 +184,13 @@ class MediaServiceTest {
 
         when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
         when(deliveryRepo.findByOrderId(orderId)).thenReturn(Optional.of(delivery));
-        when(mediaStorage.signedUrl(eq("clean://url"), anyLong()))
+        when(mediaStorage.signedUrl(eq("clean://url"), eq(clientId), anyLong()))
             .thenReturn("signed://clean");
 
         SignedUrlResponse resp = mediaService.getDownloadUrl(clientId, orderId);
 
         assertThat(resp.getUrl()).isEqualTo("signed://clean");
-        verify(mediaStorage).signedUrl("clean://url", 3600L);
+        verify(mediaStorage).signedUrl("clean://url", clientId, 3600L);
     }
 
     @Test
@@ -210,7 +210,7 @@ class MediaServiceTest {
 
         when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
         when(deliveryRepo.findByOrderId(orderId)).thenReturn(Optional.of(delivery));
-        when(mediaStorage.signedUrl(eq("watermarked://url"), anyLong()))
+        when(mediaStorage.signedUrl(eq("watermarked://url"), eq(creatorId), anyLong()))
             .thenReturn("signed://watermarked");
 
         SignedUrlResponse resp = mediaService.getDownloadUrl(creatorId, orderId);
@@ -225,7 +225,7 @@ class MediaServiceTest {
 
         when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
         when(deliveryRepo.findByOrderId(orderId)).thenReturn(Optional.of(delivery));
-        when(mediaStorage.signedUrl(any(), anyLong())).thenReturn("signed://url");
+        when(mediaStorage.signedUrl(any(), any(), anyLong())).thenReturn("signed://url");
 
         SignedUrlResponse resp = mediaService.getDownloadUrl(clientId, orderId);
 

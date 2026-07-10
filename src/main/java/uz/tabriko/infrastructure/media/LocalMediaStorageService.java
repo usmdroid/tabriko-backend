@@ -9,10 +9,12 @@ import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.security.JwtUtil;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 // Local-disk media storage for dev; set STORAGE_PROVIDER=s3 to use S3 in production
 @Service
@@ -54,10 +56,22 @@ public class LocalMediaStorageService implements MediaStorageService {
     }
 
     @Override
-    public String signedUrl(String mediaUrl, long ttlSeconds) {
-        // Generate a short-lived JWT embedding the clean file URL; redirect via /api/v1/media/signed
-        String token = jwtUtil.generateDownloadToken(mediaUrl, ttlSeconds);
+    public String signedUrl(String mediaUrl, UUID userId, long ttlSeconds) {
+        // Generate a short-lived JWT embedding the clean file URL and owning userId; the
+        // caller must present a valid JWT session matching that userId to stream the file.
+        String token = jwtUtil.generateDownloadToken(mediaUrl, userId, ttlSeconds);
         return appBaseUrl + "/api/v1/media/signed?token=" + token;
+    }
+
+    @Override
+    public InputStream read(String mediaUrl) {
+        try {
+            String withoutQuery = mediaUrl.replaceFirst("\\?.*$", "");
+            String relative = withoutQuery.replaceFirst("^" + Pattern.quote(baseUrl) + "/", "");
+            return Files.newInputStream(Paths.get(uploadDir, relative));
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read file", e);
+        }
     }
 
     private String getExtension(String filename) {

@@ -12,11 +12,13 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.time.Duration;
 import java.util.UUID;
@@ -94,14 +96,21 @@ public class S3MediaStorageService implements MediaStorageService {
     }
 
     @Override
-    public String signedUrl(String mediaUrl, long ttlSeconds) {
-        // mediaUrl is "s3://bucket/key" — extract the key
+    public String signedUrl(String mediaUrl, UUID userId, long ttlSeconds) {
+        // mediaUrl is "s3://bucket/key" — extract the key. AWS itself enforces the
+        // signature and TTL on this URL, so no separate userId binding is needed here.
         String key = mediaUrl.replaceFirst("s3://[^/]+/", "");
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
             .signatureDuration(Duration.ofSeconds(ttlSeconds))
             .getObjectRequest(req -> req.bucket(bucket).key(key))
             .build();
         return presigner.presignGetObject(presignRequest).url().toString();
+    }
+
+    @Override
+    public InputStream read(String mediaUrl) {
+        String key = mediaUrl.replaceFirst("s3://[^/]+/", "");
+        return s3.getObject(GetObjectRequest.builder().bucket(bucket).key(key).build());
     }
 
     private String getExtension(String filename) {

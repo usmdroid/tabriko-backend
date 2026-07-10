@@ -1,5 +1,6 @@
 package uz.tabriko.dto.request;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
@@ -19,5 +20,8 @@ public class WalletCallbackRequest {
     // Provider's own reference ID
     private String providerRef;
 
-    // TODO: add HMAC signature fields for Click/Payme signature verification
+    // HMAC-SHA256 hex signature over "transactionId:amount:providerRef", computed with the
+    // shared app.payment.callback-secret; verified in WalletService.handleCallback.
+    @NotBlank
+    private String signature;
 }

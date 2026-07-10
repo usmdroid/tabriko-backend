@@ -5,6 +5,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
+import uz.tabriko.common.util.PhoneUtil;
 import uz.tabriko.domain.entity.Category;
 import uz.tabriko.domain.entity.CreatorProfile;
 import uz.tabriko.domain.entity.Order;
@@ -47,9 +48,10 @@ public class AdminService {
 
     @Transactional
     public CreatorResponse addCreator(AddCreatorRequest req) {
-        User user = userRepo.findByPhone(req.getPhone()).orElseGet(() -> {
+        String phone = PhoneUtil.normalize(req.getPhone());
+        User user = userRepo.findByPhone(phone).orElseGet(() -> {
             User u = new User();
-            u.setPhone(req.getPhone());
+            u.setPhone(phone);
             u.setName(req.getName());
             u.setRole(Role.CREATOR);
             u.setStatus(UserStatus.ACTIVE);
@@ -244,6 +246,11 @@ public class AdminService {
                 .orElseThrow(() -> ApiException.notFound("Order not found"));
         if (order.getStatus() == OrderStatus.REFUNDED || order.getStatus() == OrderStatus.REJECTED) {
             throw ApiException.badRequest("Order is already " + order.getStatus().name().toLowerCase());
+        }
+        if (order.getStatus() == OrderStatus.ACCEPTED) {
+            // Funds were already released to the creator (minus commission) on accept.
+            // Refunding the client on top of that would pay out twice for the same order.
+            throw ApiException.badRequest("Order already accepted; funds were released to the creator and cannot be refunded");
         }
         order.setStatus(OrderStatus.REFUNDED);
         orderRepo.save(order);

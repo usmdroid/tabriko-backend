@@ -7,6 +7,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.CreatorApplication;
+import uz.tabriko.domain.entity.VerifiedPhoneEntity;
 import uz.tabriko.domain.enums.ApplicationActivityType;
 import uz.tabriko.domain.enums.ApplicationSocialType;
 import uz.tabriko.dto.request.SubmitApplicationRequest;
@@ -20,16 +21,23 @@ import uz.tabriko.repository.CategoryRepository;
 import uz.tabriko.repository.CreatorApplicationRepository;
 import uz.tabriko.repository.CreatorProfileRepository;
 import uz.tabriko.repository.UserRepository;
+import uz.tabriko.repository.VerifiedPhoneRepository;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
 import uz.tabriko.telegram.service.TelegramBotService;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,14 +55,32 @@ class ApplicationServiceTest {
     @Mock TelegramVerificationRepository telegramVerificationRepo;
     @Mock TelegramBotService telegramBotService;
     @Mock MediaStorageService mediaStorage;
+    @Mock VerifiedPhoneRepository verifiedPhoneRepo;
 
     ApplicationService applicationService;
 
+    // In-memory fake backing the mocked repository, so verifyPhone() -> submit() sequences
+    // across two calls behave like the real DB-backed lookup did the in-memory map before.
+    private final Map<String, VerifiedPhoneEntity> verifiedPhoneStore = new HashMap<>();
+
     @BeforeEach
     void setUp() {
+        verifiedPhoneStore.clear();
         applicationService = new ApplicationService(
                 otpService, applicationRepo, messageRepo, categoryRepo, userRepo,
-                creatorProfileRepo, telegramVerificationRepo, telegramBotService, mediaStorage);
+                creatorProfileRepo, telegramVerificationRepo, telegramBotService, mediaStorage, verifiedPhoneRepo);
+
+        lenient().when(verifiedPhoneRepo.findByPhone(anyString())).thenAnswer(inv ->
+                Optional.ofNullable(verifiedPhoneStore.get((String) inv.getArgument(0))));
+        lenient().when(verifiedPhoneRepo.save(any())).thenAnswer(inv -> {
+            VerifiedPhoneEntity e = inv.getArgument(0);
+            verifiedPhoneStore.put(e.getPhone(), e);
+            return e;
+        });
+        lenient().doAnswer(inv -> {
+            verifiedPhoneStore.remove((String) inv.getArgument(0));
+            return null;
+        }).when(verifiedPhoneRepo).deleteByPhone(anyString());
     }
 
     // ===== generateIgCode() format/alphabet — exercised indirectly via verifyPhone() =====

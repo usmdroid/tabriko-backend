@@ -55,12 +55,15 @@ public class SecurityConfig {
                     "/api/v1/catalog/**",
                     "/api/v1/creators/**",
                     "/api/v1/wallet/callback",
-                    "/api/v1/media/signed",
                     "/api/v1/telegram/webhook",
                     "/swagger-ui/**",
                     "/swagger-ui.html",
                     "/v3/api-docs/**",
-                    "/files/**"
+                    // Order-delivery media is deliberately excluded: /api/v1/media/signed and
+                    // /files/media/** require authentication + ownership, unlike the folders below.
+                    "/files/portfolio/**",
+                    "/files/kyc/**",
+                    "/files/applications/**"
                 ).permitAll()
                 // Admin only
                 .requestMatchers("/api/v1/admin/**", "/api/v1/moderation/**")

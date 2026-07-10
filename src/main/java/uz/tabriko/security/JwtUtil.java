@@ -72,28 +72,38 @@ public class JwtUtil {
         }
     }
 
-    // Short-lived download token for signed media URLs (local storage)
-    public String generateDownloadToken(String fileUrl, long ttlSeconds) {
+    // Short-lived download token for signed media URLs (local storage). Bound to the
+    // requesting user so the token cannot be reused by anyone other than its owner.
+    public String generateDownloadToken(String fileUrl, UUID userId, long ttlSeconds) {
         return Jwts.builder()
             .subject("download")
             .claim("url", fileUrl)
+            .claim("uid", userId.toString())
             .issuedAt(new Date())
             .expiration(new Date(System.currentTimeMillis() + ttlSeconds * 1000L))
             .signWith(accessKey)
             .compact();
     }
 
-    public String extractDownloadUrl(String token) {
+    public DownloadTokenClaims extractDownloadClaims(String token) {
         try {
             Claims claims = Jwts.parser().verifyWith(accessKey).build()
                 .parseSignedClaims(token).getPayload();
             if (!"download".equals(claims.getSubject())) {
-                throw new IllegalArgumentException("Not a download token");
+                return null;
             }
-            return claims.get("url", String.class);
+            String url = claims.get("url", String.class);
+            String uid = claims.get("uid", String.class);
+            if (url == null || uid == null) {
+                return null;
+            }
+            return new DownloadTokenClaims(url, UUID.fromString(uid));
         } catch (JwtException | IllegalArgumentException e) {
             log.debug("Invalid download token: {}", e.getMessage());
             return null;
         }
+    }
+
+    public record DownloadTokenClaims(String fileUrl, UUID userId) {
     }
 }

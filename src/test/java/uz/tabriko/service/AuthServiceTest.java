@@ -16,6 +16,7 @@ import uz.tabriko.dto.request.LoginRequest;
 import uz.tabriko.dto.request.RefreshTokenRequest;
 import uz.tabriko.dto.request.RegisterRequest;
 import uz.tabriko.dto.request.ResetPasswordRequest;
+import uz.tabriko.dto.request.SendOtpRequest;
 import uz.tabriko.dto.response.AuthResponse;
 import uz.tabriko.dto.response.TokenResponse;
 import uz.tabriko.dto.response.UserResponse;
@@ -167,6 +168,58 @@ class AuthServiceTest {
         assertThat(resp.getAccessToken()).isEqualTo(ACCESS);
 
         verify(userRepo).save(argThat(u -> HASH.equals(u.getPasswordHash())));
+    }
+
+    // --- phone normalization ---
+
+    @Test
+    void sendOtp_rawPhoneFormat_normalizesBeforeStoring() {
+        SendOtpRequest req = new SendOtpRequest();
+        req.setPhone("998 90 123 45 67");
+
+        authService.sendOtp(req);
+
+        verify(otpService).sendOtp(PHONE);
+    }
+
+    @Test
+    void register_rawPhoneFormat_normalizesForLookupAndSave() {
+        String raw = "+998 90-123-45-67";
+        when(otpService.verifyOtp(PHONE, OTP)).thenReturn(true);
+        when(userRepo.findByPhone(PHONE)).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(PASSWORD)).thenReturn(HASH);
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        RegisterRequest req = new RegisterRequest();
+        req.setPhone(raw);
+        req.setCode(OTP);
+        req.setPassword(PASSWORD);
+        req.setName("Test User");
+
+        authService.register(req);
+
+        // Verified/looked-up under the normalized phone, not the raw input
+        verify(otpService).verifyOtp(PHONE, OTP);
+        verify(userRepo).findByPhone(PHONE);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepo).save(captor.capture());
+        assertThat(captor.getValue().getPhone()).isEqualTo(PHONE);
+    }
+
+    @Test
+    void login_differentRawFormat_matchesUserRegisteredWithNormalizedPhone() {
+        // A user stored with a normalized phone must still be found when the
+        // client sends the same number in a different raw format.
+        String differentRawFormat = "998901234567";
+        User u = user(PHONE, HASH, UserStatus.ACTIVE);
+        when(userRepo.findByPhone(PHONE)).thenReturn(Optional.of(u));
+        when(passwordEncoder.matches(PASSWORD, HASH)).thenReturn(true);
+
+        AuthResponse resp = authService.login(loginReq(differentRawFormat, PASSWORD));
+
+        assertThat(resp.getAccessToken()).isEqualTo(ACCESS);
+        verify(userRepo).findByPhone(PHONE);
     }
 
     // --- login ---

@@ -23,6 +23,7 @@ import uz.tabriko.dto.response.ApplicationVerificationResponse;
 import uz.tabriko.dto.response.PageResponse;
 import uz.tabriko.dto.response.PhoneVerifyResponse;
 import uz.tabriko.dto.response.SampleUploadResponse;
+import uz.tabriko.domain.entity.VerifiedPhoneEntity;
 import uz.tabriko.infrastructure.firebase.OtpService;
 import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.repository.*;
@@ -36,7 +37,6 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -71,14 +71,15 @@ public class ApplicationService {
     private final TelegramVerificationRepository telegramVerificationRepo;
     private final TelegramBotService telegramBotService;
     private final MediaStorageService mediaStorage;
+    private final VerifiedPhoneRepository verifiedPhoneRepo;
 
     private final SecureRandom secureRandom = new SecureRandom();
-    private final ConcurrentHashMap<String, VerifiedPhone> verifiedPhones = new ConcurrentHashMap<>();
 
     // --- PUBLIC ---
 
     // Verifies the OTP immediately and exchanges it for a longer-lived token, so the
     // applicant isn't racing the OTP's short TTL while filling out the rest of the form.
+    @Transactional
     public PhoneVerifyResponse verifyPhone(VerifyPhoneRequest req) {
         if (!otpService.verifyOtp(req.getPhone(), req.getCode())) {
             throw ApiException.badRequest("Invalid or expired OTP code");
@@ -86,8 +87,13 @@ public class ApplicationService {
 
         String token = generateTrackingToken();
         String igCode = generateIgCode();
-        verifiedPhones.put(req.getPhone(),
-                new VerifiedPhone(token, Instant.now().plusSeconds(VERIFY_TOKEN_TTL_SECONDS), igCode));
+
+        VerifiedPhoneEntity entity = verifiedPhoneRepo.findByPhone(req.getPhone()).orElseGet(VerifiedPhoneEntity::new);
+        entity.setPhone(req.getPhone());
+        entity.setVerifyToken(token);
+        entity.setIgVerifyCode(igCode);
+        entity.setExpiresAt(Instant.now().plusSeconds(VERIFY_TOKEN_TTL_SECONDS));
+        verifiedPhoneRepo.save(entity);
 
         PhoneVerifyResponse resp = new PhoneVerifyResponse();
         resp.setPhone(req.getPhone());
@@ -111,17 +117,17 @@ public class ApplicationService {
     }
 
     @Scheduled(fixedDelay = 60_000)
+    @Transactional
     void evictExpiredVerifications() {
-        verifiedPhones.entrySet().removeIf(e -> e.getValue().isExpired());
+        verifiedPhoneRepo.deleteExpired(Instant.now());
     }
 
     @Transactional
     public ApplicationSubmitResponse submit(SubmitApplicationRequest req) {
-        VerifiedPhone verified = verifiedPhones.get(req.getPhone());
-        if (verified == null || verified.isExpired() || !verified.token.equals(req.getVerifyToken())) {
-            throw ApiException.badRequest("Phone verification expired. Please verify your phone number again.");
-        }
-        verifiedPhones.remove(req.getPhone());
+        VerifiedPhoneEntity verified = verifiedPhoneRepo.findByPhone(req.getPhone())
+                .filter(v -> !v.isExpired() && v.getVerifyToken().equals(req.getVerifyToken()))
+                .orElseThrow(() -> ApiException.badRequest("Phone verification expired. Please verify your phone number again."));
+        verifiedPhoneRepo.deleteByPhone(req.getPhone());
 
         String normalizedPhone = PhoneUtil.normalize(req.getPhone());
         if (applicationRepo.existsByPhoneAndStatusIn(normalizedPhone, ACTIVE_STATUSES)) {
@@ -162,7 +168,7 @@ public class ApplicationService {
                 throw ApiException.badRequest("igUsername is required when INSTAGRAM is selected");
             }
             app.setIgUsername(req.getIgUsername());
-            igVerifyCode = verified.igCode;
+            igVerifyCode = verified.getIgVerifyCode();
             app.setIgVerifyCode(igVerifyCode);
         }
         if (req.getSocialTypes().contains(ApplicationSocialType.TELEGRAM)) {
@@ -479,21 +485,5 @@ public class ApplicationService {
             code = sb.toString();
         } while (applicationRepo.existsByIgVerifyCode(code));
         return code;
-    }
-
-    private static final class VerifiedPhone {
-        final String token;
-        final Instant expiresAt;
-        final String igCode;
-
-        VerifiedPhone(String token, Instant expiresAt, String igCode) {
-            this.token = token;
-            this.expiresAt = expiresAt;
-            this.igCode = igCode;
-        }
-
-        boolean isExpired() {
-            return Instant.now().isAfter(expiresAt);
-        }
     }
 }

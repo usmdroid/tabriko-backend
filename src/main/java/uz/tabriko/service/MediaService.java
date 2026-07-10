@@ -96,7 +96,7 @@ public class MediaService {
         String mediaUrl = order.getStatus() == OrderStatus.ACCEPTED
             ? delivery.getMediaUrlClean()
             : delivery.getMediaUrlWatermarked();
-        String signedUrl = mediaStorage.signedUrl(mediaUrl, SIGNED_URL_TTL_SECONDS);
+        String signedUrl = mediaStorage.signedUrl(mediaUrl, userId, SIGNED_URL_TTL_SECONDS);
         return new SignedUrlResponse(signedUrl, SIGNED_URL_TTL_SECONDS);
     }
 

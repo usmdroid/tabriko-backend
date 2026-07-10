@@ -3,7 +3,7 @@ package uz.tabriko.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpHeaders;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -15,10 +15,12 @@ import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.dto.response.MediaUploadResponse;
 import uz.tabriko.dto.response.SignedUrlResponse;
+import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.security.JwtUtil;
 import uz.tabriko.security.UserPrincipal;
 import uz.tabriko.service.MediaService;
 
+import java.net.URLConnection;
 import java.util.UUID;
 
 @RestController
@@ -29,6 +31,7 @@ public class MediaController {
 
     private final MediaService mediaService;
     private final JwtUtil jwtUtil;
+    private final MediaStorageService mediaStorage;
 
     @PostMapping(value = "/orders/{id}/media", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('CREATOR')")
@@ -51,16 +54,25 @@ public class MediaController {
         return ResponseEntity.ok(BaseResponse.ok(mediaService.getDownloadUrl(principal.getUserId(), id)));
     }
 
-    // Public endpoint — validates download token and redirects to the actual file URL
+    // Authenticated — streams the file only to the user the download token was issued to,
+    // so a leaked token/URL can't be used by anyone other than the order's CLIENT/CREATOR.
     @GetMapping("/media/signed")
-    @Operation(summary = "Redirect to signed file (token-validated, no auth required)")
-    public ResponseEntity<Void> redirectSigned(@RequestParam String token) {
-        String fileUrl = jwtUtil.extractDownloadUrl(token);
-        if (fileUrl == null) {
+    @Operation(summary = "Stream signed media file (auth required, token bound to requesting user)")
+    public ResponseEntity<InputStreamResource> streamSigned(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam String token
+    ) {
+        JwtUtil.DownloadTokenClaims claims = jwtUtil.extractDownloadClaims(token);
+        if (claims == null) {
             throw ApiException.unauthorized("Invalid or expired download token");
         }
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION, fileUrl)
-                .build();
+        if (!claims.userId().equals(principal.getUserId())) {
+            throw ApiException.forbidden("This download link does not belong to you");
+        }
+
+        String contentType = URLConnection.guessContentTypeFromName(claims.fileUrl());
+        return ResponseEntity.ok()
+                .contentType(contentType != null ? MediaType.parseMediaType(contentType) : MediaType.APPLICATION_OCTET_STREAM)
+                .body(new InputStreamResource(mediaStorage.read(claims.fileUrl())));
     }
 }
