@@ -16,7 +16,10 @@ import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.*;
 import org.telegram.telegrambots.meta.api.objects.chatmember.ChatMember;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import uz.tabriko.domain.entity.ApplicationMessage;
 import uz.tabriko.domain.entity.CreatorApplication;
+import uz.tabriko.domain.enums.ApplicationStatus;
+import uz.tabriko.domain.enums.MessageAuthor;
 import uz.tabriko.repository.ApplicationMessageRepository;
 import uz.tabriko.repository.CreatorApplicationRepository;
 import uz.tabriko.telegram.entity.TelegramBotChat;
@@ -717,6 +720,76 @@ class TelegramBotServiceTest {
         assertThat(session.getStatus()).isEqualTo("VERIFIED");
         assertThat(session.getVerifiedAt()).isNotNull();
         verify(client).execute(any(LeaveChat.class));
+    }
+
+    // ===== handleApplicantReply — must target the INFO_REQUESTED app, not merely the newest =====
+
+    private Update textUpdate(long userId, long chatId, String text) {
+        var msg = new Message();
+        msg.setFrom(tgUser(userId));
+        msg.setChat(privateChat(chatId));
+        msg.setText(text);
+        var update = new Update();
+        update.setUpdateId(6);
+        update.setMessage(msg);
+        return update;
+    }
+
+    @Test
+    void applicantReply_multipleApplicationsForPhone_savesToInfoRequestedOne() throws TelegramApiException {
+        long userId = 100L;
+        long chatId = 200L;
+        String phone = "+998901234567";
+
+        TelegramVerification session = new TelegramVerification();
+        session.setTelegramUserId(userId);
+        session.setPhone(phone);
+        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
+
+        // Old REJECTED application and a newer application of another status both exist for
+        // this phone — the newest-by-phone lookup would incorrectly pick one of these.
+        CreatorApplication newestNonMatchingApp = new CreatorApplication();
+        newestNonMatchingApp.setStatus(ApplicationStatus.SUBMITTED);
+        when(applicationRepo.findFirstByPhoneOrderByCreatedAtDesc(phone))
+                .thenReturn(Optional.of(newestNonMatchingApp));
+
+        CreatorApplication infoRequestedApp = new CreatorApplication();
+        infoRequestedApp.setStatus(ApplicationStatus.INFO_REQUESTED);
+        when(applicationRepo.findFirstByPhoneAndStatusOrderByCreatedAtDesc(phone, ApplicationStatus.INFO_REQUESTED))
+                .thenReturn(Optional.of(infoRequestedApp));
+
+        service.handleUpdate(textUpdate(userId, chatId, "Mana mening javobim"));
+
+        ArgumentCaptor<ApplicationMessage> savedCap = ArgumentCaptor.forClass(ApplicationMessage.class);
+        verify(messageRepo).save(savedCap.capture());
+        assertThat(savedCap.getValue().getApplication()).isSameAs(infoRequestedApp);
+        assertThat(savedCap.getValue().getAuthor()).isEqualTo(MessageAuthor.APPLICANT);
+        assertThat(savedCap.getValue().getText()).isEqualTo("Mana mening javobim");
+
+        ArgumentCaptor<SendMessage> sendCap = ArgumentCaptor.forClass(SendMessage.class);
+        verify(client).execute(sendCap.capture());
+        assertThat(sendCap.getValue().getText()).isEqualTo("Javobingiz qabul qilindi. Rahmat!");
+    }
+
+    @Test
+    void applicantReply_noInfoRequestedApp_sendsPoliteMessage() throws TelegramApiException {
+        long userId = 100L;
+        long chatId = 200L;
+        String phone = "+998901234567";
+
+        TelegramVerification session = new TelegramVerification();
+        session.setTelegramUserId(userId);
+        session.setPhone(phone);
+        when(repo.findFirstByTelegramUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(session));
+        when(applicationRepo.findFirstByPhoneAndStatusOrderByCreatedAtDesc(phone, ApplicationStatus.INFO_REQUESTED))
+                .thenReturn(Optional.empty());
+
+        service.handleUpdate(textUpdate(userId, chatId, "Salom"));
+
+        verify(messageRepo, never()).save(any());
+        ArgumentCaptor<SendMessage> sendCap = ArgumentCaptor.forClass(SendMessage.class);
+        verify(client).execute(sendCap.capture());
+        assertThat(sendCap.getValue().getText()).isEqualTo("Hozircha javob talab qilinmagan. Rahmat!");
     }
 
     // ===== Error resilience =====

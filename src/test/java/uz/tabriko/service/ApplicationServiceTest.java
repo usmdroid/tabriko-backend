@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.CreatorApplication;
 import uz.tabriko.domain.enums.ApplicationActivityType;
 import uz.tabriko.domain.enums.ApplicationSocialType;
@@ -26,7 +27,9 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -158,5 +161,41 @@ class ApplicationServiceTest {
 
         assertThat(resp.getIgVerifyCode()).isNull();
         assertThat(resp.getStatus()).isEqualTo("SUBMITTED");
+    }
+
+    // ===== Regression (USM-381): the duplicate-active-application guard must be checked
+    //       against the NORMALIZED phone, so re-submitting the same number in a different
+    //       raw format is still caught as a duplicate =====
+
+    @Test
+    void submit_duplicateGuard_catchesSameNumber_inDifferentRawFormat() {
+        when(otpService.verifyOtp(anyString(), anyString())).thenReturn(true);
+        when(applicationRepo.existsByIgVerifyCode(anyString())).thenReturn(false);
+        // An active application already exists for the normalized form of this phone.
+        when(applicationRepo.existsByPhoneAndStatusIn(eq("+998901112233"), org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(true);
+
+        VerifyPhoneRequest verifyReq = new VerifyPhoneRequest();
+        verifyReq.setPhone("998 90 111 22 33");
+        verifyReq.setCode("1234");
+        PhoneVerifyResponse verifyResp = applicationService.verifyPhone(verifyReq);
+
+        SubmitApplicationRequest submitReq = new SubmitApplicationRequest();
+        submitReq.setPhone("998 90 111 22 33");
+        submitReq.setVerifyToken(verifyResp.getVerifyToken());
+        submitReq.setName("Test Applicant");
+        submitReq.setActivityType(ApplicationActivityType.OTHER);
+        submitReq.setOtherText("blogging");
+        submitReq.setPassportSeries("AB");
+        submitReq.setPassportNumber("1234567");
+        submitReq.setSocialTypes(Set.of(ApplicationSocialType.TELEGRAM));
+        submitReq.setTelegramUsername("test_channel");
+
+        assertThatThrownBy(() -> applicationService.submit(submitReq))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("active application already exists");
+
+        org.mockito.Mockito.verify(applicationRepo, org.mockito.Mockito.never())
+                .save(org.mockito.ArgumentMatchers.any(CreatorApplication.class));
     }
 }

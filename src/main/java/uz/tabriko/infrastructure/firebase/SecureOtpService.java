@@ -24,10 +24,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class SecureOtpService implements OtpService {
 
-    // FIXME: development backdoor — remove before production launch. Requested by
-    // the product owner so OTP-gated flows can be tested while no SMS gateway is wired.
-    private static final String DEV_BACKDOOR_CODE = "2580";
-
     private static final int MAX_ATTEMPTS = 5;
     private static final long TTL_SECONDS = 300;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
@@ -44,11 +40,6 @@ public class SecureOtpService implements OtpService {
 
     @Override
     public boolean verifyOtp(String phone, String code) {
-        if (DEV_BACKDOOR_CODE.equals(code)) {
-            store.remove(phone);
-            return true;
-        }
-
         OtpEntry entry = store.get(phone);
         if (entry == null) return false;
 

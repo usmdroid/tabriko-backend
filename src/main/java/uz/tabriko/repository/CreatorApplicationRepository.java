@@ -18,6 +18,8 @@ public interface CreatorApplicationRepository extends JpaRepository<CreatorAppli
 
     Optional<CreatorApplication> findFirstByPhoneOrderByCreatedAtDesc(String phone);
 
+    Optional<CreatorApplication> findFirstByPhoneAndStatusOrderByCreatedAtDesc(String phone, ApplicationStatus status);
+
     Page<CreatorApplication> findByStatusOrderByCreatedAtDesc(ApplicationStatus status, Pageable pageable);
 
     Page<CreatorApplication> findAllByOrderByCreatedAtDesc(Pageable pageable);

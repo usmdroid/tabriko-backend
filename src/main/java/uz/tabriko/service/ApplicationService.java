@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.exception.ApiException;
+import uz.tabriko.common.util.PhoneUtil;
 import uz.tabriko.domain.entity.*;
 import uz.tabriko.domain.enums.*;
 import uz.tabriko.dto.request.AdminApplicationDecisionRequest;
@@ -122,12 +123,13 @@ public class ApplicationService {
         }
         verifiedPhones.remove(req.getPhone());
 
-        if (applicationRepo.existsByPhoneAndStatusIn(req.getPhone(), ACTIVE_STATUSES)) {
+        String normalizedPhone = PhoneUtil.normalize(req.getPhone());
+        if (applicationRepo.existsByPhoneAndStatusIn(normalizedPhone, ACTIVE_STATUSES)) {
             throw ApiException.conflict("An active application already exists for this phone");
         }
 
         CreatorApplication app = new CreatorApplication();
-        app.setPhone(req.getPhone());
+        app.setPhone(normalizedPhone);
         app.setName(req.getName());
         app.setActivityType(req.getActivityType());
         app.setPassportSeries(req.getPassportSeries().toUpperCase());

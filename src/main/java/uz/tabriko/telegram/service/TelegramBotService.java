@@ -18,6 +18,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import uz.tabriko.common.util.PhoneUtil;
 import uz.tabriko.domain.entity.ApplicationMessage;
 import uz.tabriko.domain.enums.ApplicationStatus;
 import uz.tabriko.domain.enums.MessageAuthor;
@@ -420,16 +421,13 @@ public class TelegramBotService {
             return;
         }
 
-        var appOpt = applicationRepo.findFirstByPhoneOrderByCreatedAtDesc(session.getPhone());
+        var appOpt = applicationRepo.findFirstByPhoneAndStatusOrderByCreatedAtDesc(
+                session.getPhone(), ApplicationStatus.INFO_REQUESTED);
         if (appOpt.isEmpty()) {
-            sendText(chatId, "Bu raqamga tegishli ariza topilmadi.");
-            return;
-        }
-        var app = appOpt.get();
-        if (app.getStatus() != ApplicationStatus.INFO_REQUESTED) {
             sendText(chatId, "Hozircha javob talab qilinmagan. Rahmat!");
             return;
         }
+        var app = appOpt.get();
 
         ApplicationMessage reply = new ApplicationMessage();
         reply.setApplication(app);
@@ -456,10 +454,7 @@ public class TelegramBotService {
     }
 
     private String normalizePhone(String raw) {
-        if (raw == null) return null;
-        // Telegram sends phone numbers as digits only (no leading +)
-        String digits = raw.replaceAll("[^0-9]", "");
-        return "+" + digits;
+        return PhoneUtil.normalize(raw);
     }
 
     private void sendText(Long chatId, String text) {
