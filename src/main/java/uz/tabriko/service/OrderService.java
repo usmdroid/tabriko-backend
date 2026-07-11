@@ -86,7 +86,8 @@ public class OrderService {
                 creator.getId(),
                 "New order",
                 "You received a new order from " + client.getName(),
-                NotificationType.ORDER_RECEIVED
+                NotificationType.ORDER_RECEIVED,
+                order.getId()
         );
 
         return mapper.toOrderResponse(order, null);
@@ -151,7 +152,8 @@ public class OrderService {
                 order.getClient().getId(),
                 "Order delivered",
                 "Your order from " + order.getCreator().getName() + " is ready",
-                NotificationType.ORDER_DELIVERED
+                NotificationType.ORDER_DELIVERED,
+                order.getId()
         );
 
         return mapper.toOrderResponse(order, delivery);
@@ -190,7 +192,8 @@ public class OrderService {
                 order.getCreator().getId(),
                 "Order accepted",
                 "Your greeting was accepted. Funds have been released.",
-                NotificationType.ORDER_ACCEPTED
+                NotificationType.ORDER_ACCEPTED,
+                order.getId()
         );
 
         return mapper.toOrderResponse(order, delivery);
@@ -219,10 +222,32 @@ public class OrderService {
                 order.getCreator().getId(),
                 "Order rejected",
                 "Client rejected your greeting: " + req.getReason(),
-                NotificationType.ORDER_REJECTED
+                NotificationType.ORDER_REJECTED,
+                order.getId()
         );
 
         return mapper.toOrderResponse(order, deliveryRepo.findByOrderId(orderId).orElse(null));
+    }
+
+    @Transactional
+    public void markSeen(UUID creatorId, UUID orderId) {
+        Order order = orderRepo.findById(orderId)
+                .orElseThrow(() -> ApiException.notFound("Order not found"));
+        if (!order.getCreator().getId().equals(creatorId)) {
+            throw ApiException.forbidden("Not your order");
+        }
+        if (order.getSeenAt() != null) {
+            return;
+        }
+        order.setSeenAt(Instant.now());
+        orderRepo.save(order);
+        notificationService.sendNotification(
+                order.getClient().getId(),
+                "Ijodkor ko'rdi",
+                "Ijodkor buyurtmangizni ko'rdi",
+                NotificationType.ORDER_VIEWED,
+                order.getId()
+        );
     }
 
     // Auto-refund orders that passed deadline without delivery
@@ -240,7 +265,8 @@ public class OrderService {
                     order.getClient().getId(),
                     "Order refunded",
                     "Your order was not delivered on time. Full refund issued.",
-                    NotificationType.ORDER_REFUNDED
+                    NotificationType.ORDER_REFUNDED,
+                    order.getId()
             );
         }
     }

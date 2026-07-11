@@ -5,10 +5,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.User;
+import uz.tabriko.domain.entity.UserDevice;
+import uz.tabriko.domain.enums.Platform;
 import uz.tabriko.dto.request.UpdateProfileRequest;
 import uz.tabriko.dto.response.UserResponse;
+import uz.tabriko.repository.UserDeviceRepository;
 import uz.tabriko.repository.UserRepository;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -16,6 +20,7 @@ import java.util.UUID;
 public class UserService {
 
     private final UserRepository userRepo;
+    private final UserDeviceRepository userDeviceRepo;
     private final UserMapper userMapper;
 
     public UserResponse getMe(UUID userId) {
@@ -34,9 +39,18 @@ public class UserService {
     }
 
     @Transactional
-    public void registerFcmToken(UUID userId, String token) {
+    public void registerFcmToken(UUID userId, String token, Platform platform, String appVersion) {
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> ApiException.notFound("User not found"));
+
+        UserDevice device = userDeviceRepo.findByFcmToken(token).orElse(new UserDevice());
+        device.setUser(user);
+        device.setFcmToken(token);
+        device.setPlatform(platform);
+        device.setAppVersion(appVersion);
+        device.setUpdatedAt(Instant.now());
+        userDeviceRepo.save(device);
+
         user.setFcmToken(token);
         userRepo.save(user);
     }

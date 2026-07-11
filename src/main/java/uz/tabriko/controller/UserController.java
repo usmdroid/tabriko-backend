@@ -42,7 +42,7 @@ public class UserController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody RegisterFcmTokenRequest req
     ) {
-        userService.registerFcmToken(principal.getUserId(), req.getToken());
+        userService.registerFcmToken(principal.getUserId(), req.getToken(), req.getPlatform(), req.getAppVersion());
         return ResponseEntity.ok(BaseResponse.ok());
     }
 }

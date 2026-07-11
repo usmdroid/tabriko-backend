@@ -14,8 +14,10 @@ import uz.tabriko.dto.request.AddCreatorRequest;
 import uz.tabriko.dto.request.AdminCategoryRequest;
 import uz.tabriko.dto.request.AdminOccasionRequest;
 import uz.tabriko.dto.request.AdminPromotionRequest;
+import uz.tabriko.dto.request.BroadcastNotificationRequest;
 import uz.tabriko.dto.request.FlagCreatorRequest;
 import uz.tabriko.dto.response.PlatformSettings;
+import uz.tabriko.service.AdminBroadcastService;
 import uz.tabriko.service.AdminService;
 import uz.tabriko.service.OccasionService;
 import uz.tabriko.service.PromotionService;
@@ -32,6 +34,15 @@ public class AdminController {
     private final AdminService adminService;
     private final OccasionService occasionService;
     private final PromotionService promotionService;
+    private final AdminBroadcastService adminBroadcastService;
+
+    // --- Notifications ---
+
+    @PostMapping("/notifications/broadcast")
+    @Operation(summary = "Send a broadcast (SYSTEM) notification to targeted users")
+    public ResponseEntity<BaseResponse<?>> broadcastNotification(@Valid @RequestBody BroadcastNotificationRequest req) {
+        return ResponseEntity.ok(BaseResponse.ok(adminBroadcastService.broadcast(req)));
+    }
 
     // --- Categories ---
 

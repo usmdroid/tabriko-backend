@@ -90,6 +90,17 @@ public class OrderController {
         return ResponseEntity.ok(BaseResponse.ok(orderService.rejectOrder(principal.getUserId(), id, req)));
     }
 
+    @PostMapping("/{id}/seen")
+    @PreAuthorize("hasRole('CREATOR')")
+    @Operation(summary = "Creator marks an order as seen")
+    public ResponseEntity<BaseResponse<Void>> markSeen(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID id
+    ) {
+        orderService.markSeen(principal.getUserId(), id);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
     @PatchMapping("/{id}/privacy")
     @PreAuthorize("hasRole('CLIENT')")
     @Operation(summary = "Update order public/private visibility")

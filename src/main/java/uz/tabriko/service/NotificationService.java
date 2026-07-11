@@ -7,13 +7,18 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.Notification;
 import uz.tabriko.domain.entity.User;
+import uz.tabriko.domain.entity.UserDevice;
 import uz.tabriko.domain.enums.NotificationType;
 import uz.tabriko.dto.response.NotificationResponse;
 import uz.tabriko.dto.response.PageResponse;
 import uz.tabriko.infrastructure.firebase.PushNotificationService;
 import uz.tabriko.repository.NotificationRepository;
+import uz.tabriko.repository.UserDeviceRepository;
 import uz.tabriko.repository.UserRepository;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -22,6 +27,7 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepo;
     private final UserRepository userRepo;
+    private final UserDeviceRepository userDeviceRepo;
     private final PushNotificationService pushService;
     private final UserMapper mapper;
 
@@ -45,6 +51,11 @@ public class NotificationService {
 
     @Transactional
     public void sendNotification(UUID userId, String title, String body, NotificationType type) {
+        sendNotification(userId, title, body, type, null);
+    }
+
+    @Transactional
+    public void sendNotification(UUID userId, String title, String body, NotificationType type, UUID orderId) {
         User user = userRepo.findById(userId).orElse(null);
         if (user == null) return;
 
@@ -55,8 +66,19 @@ public class NotificationService {
         n.setType(type);
         notificationRepo.save(n);
 
-        if (user.getFcmToken() != null) {
-            pushService.sendPush(user.getFcmToken(), title, body);
+        Map<String, String> data = new HashMap<>();
+        data.put("type", type.name());
+        if (orderId != null) {
+            data.put("orderId", orderId.toString());
+        }
+
+        List<UserDevice> devices = userDeviceRepo.findByUserId(userId);
+        for (UserDevice device : devices) {
+            try {
+                pushService.sendPush(device.getFcmToken(), title, body, data);
+            } catch (PushNotificationService.DeadTokenException e) {
+                userDeviceRepo.deleteByFcmToken(e.getMessage());
+            }
         }
     }
 }

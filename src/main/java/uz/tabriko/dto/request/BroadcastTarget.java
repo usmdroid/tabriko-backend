@@ -1,18 +1,15 @@
 package uz.tabriko.dto.request;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import uz.tabriko.domain.enums.BroadcastTargetType;
 import uz.tabriko.domain.enums.Platform;
 
 @Data
-public class RegisterFcmTokenRequest {
-    @NotBlank
-    private String token;
-
+public class BroadcastTarget {
     @NotNull
+    private BroadcastTargetType type;
+    private String minVersion;
+    private String maxVersion;
     private Platform platform;
-
-    @NotBlank
-    private String appVersion;
 }

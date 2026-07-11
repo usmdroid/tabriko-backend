@@ -355,6 +355,56 @@ class OrderServiceTest {
         assertThat(txCap.getValue().getType()).isEqualTo(TransactionType.REFUND);
     }
 
+    // ===== MARK SEEN =====
+
+    @Test
+    void markSeen_firstCall_setsSeenAtAndNotifiesClient() {
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.markSeen(creatorId, orderId);
+
+        assertThat(order.getSeenAt()).isNotNull();
+        verify(orderRepo).save(order);
+        verify(notificationService).sendNotification(
+                eq(clientId),
+                eq("Ijodkor ko'rdi"),
+                eq("Ijodkor buyurtmangizni ko'rdi"),
+                eq(NotificationType.ORDER_VIEWED),
+                eq(orderId)
+        );
+    }
+
+    @Test
+    void markSeen_secondCall_isNoOp() {
+        order.setSeenAt(Instant.now().minusSeconds(60));
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+
+        orderService.markSeen(creatorId, orderId);
+
+        verify(orderRepo, never()).save(any());
+        verify(notificationService, never()).sendNotification(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void markSeen_wrongCreator_throwsForbidden() {
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.markSeen(UUID.randomUUID(), orderId))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("Not your order");
+
+        verify(orderRepo, never()).save(any());
+    }
+
+    @Test
+    void markSeen_orderNotFound_throwsNotFound() {
+        when(orderRepo.findById(orderId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orderService.markSeen(creatorId, orderId))
+                .isInstanceOf(ApiException.class);
+    }
+
     // ===== PRIVACY / CONSENT =====
 
     @Test

@@ -41,6 +41,7 @@ class AdminCreatorContactControllerTest {
     @MockBean AdminService adminService;
     @MockBean uz.tabriko.service.OccasionService occasionService;
     @MockBean uz.tabriko.service.PromotionService promotionService;
+    @MockBean uz.tabriko.service.AdminBroadcastService adminBroadcastService;
     @MockBean uz.tabriko.security.JwtUtil jwtUtil;
 
     @TestConfiguration

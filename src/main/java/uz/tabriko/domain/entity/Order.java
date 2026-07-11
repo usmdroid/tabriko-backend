@@ -73,4 +73,7 @@ public class Order {
     // Client grants creator permission to show delivery in portfolio
     @Column(name = "portfolio_consent", nullable = false)
     private boolean portfolioConsent = false;
+
+    @Column(name = "seen_at")
+    private Instant seenAt;
 }
