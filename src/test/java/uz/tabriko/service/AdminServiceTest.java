@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.Category;
+import uz.tabriko.domain.entity.CreatorContact;
 import uz.tabriko.domain.entity.CreatorProfile;
 import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
@@ -17,11 +18,16 @@ import uz.tabriko.domain.enums.OrderStatus;
 import uz.tabriko.domain.enums.ReportStatus;
 import uz.tabriko.domain.enums.Role;
 import uz.tabriko.domain.enums.UserStatus;
+import uz.tabriko.dto.request.AddCreatorContactRequest;
 import uz.tabriko.dto.request.AddCreatorRequest;
 import uz.tabriko.dto.response.AdminStatsResponse;
 import uz.tabriko.dto.response.AdminUserResponse;
+import uz.tabriko.dto.response.CreatorContactResponse;
+import uz.tabriko.dto.response.CreatorResponse;
 import uz.tabriko.dto.response.PlatformSettings;
 import uz.tabriko.repository.*;
+
+import org.springframework.data.domain.Page;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
@@ -46,6 +52,7 @@ class AdminServiceTest {
     @Mock ReportRepository reportRepo;
     @Mock PlatformSettingsRepository settingsRepo;
     @Mock uz.tabriko.repository.WalletTransactionRepository walletTxRepo;
+    @Mock CreatorContactRepository contactRepo;
     @Mock uz.tabriko.infrastructure.payment.PaymentGateway paymentGateway;
     @Mock NotificationService notificationService;
     @Mock UserMapper mapper;
@@ -423,5 +430,229 @@ class AdminServiceTest {
         // getSettings is read-only: persisting a default row is updateSettings' job.
         assertThat(result).isNotNull();
         verify(settingsRepo, never()).save(any());
+    }
+
+    // ===== GET /admin/creators/{id} — getCreatorDetail =====
+
+    @Test
+    void getCreatorDetail_existingCreator_returnsDetailWithContacts() {
+        UUID creatorId = UUID.randomUUID();
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUser(clientUser);
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(cp));
+        when(portfolioRepo.findPublicWithConsent(creatorId)).thenReturn(List.of());
+
+        CreatorResponse base = new CreatorResponse();
+        base.setId(creatorId);
+        base.setName("Star Creator");
+        when(mapper.toCreatorResponse(eq(cp), anyList())).thenReturn(base);
+
+        CreatorContact contact = new CreatorContact();
+        contact.setId(UUID.randomUUID());
+        contact.setCreatorId(creatorId);
+        contact.setPhone("+998901234567");
+        contact.setCreatedAt(Instant.now());
+        when(contactRepo.findByCreatorIdOrderByCreatedAtAsc(creatorId)).thenReturn(List.of(contact));
+
+        CreatorContactResponse contactResponse = new CreatorContactResponse();
+        contactResponse.setId(contact.getId());
+        contactResponse.setPhone(contact.getPhone());
+        when(mapper.toContactResponses(anyList())).thenReturn(List.of(contactResponse));
+
+        CreatorResponse result = adminService.getCreatorDetail(creatorId);
+
+        assertThat(result.getId()).isEqualTo(creatorId);
+        assertThat(result.getName()).isEqualTo("Star Creator");
+        assertThat(result.getContacts()).hasSize(1);
+        assertThat(result.getContacts().get(0).getPhone()).isEqualTo("+998901234567");
+    }
+
+    @Test
+    void getCreatorDetail_notFound_throwsApiException() {
+        UUID creatorId = UUID.randomUUID();
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminService.getCreatorDetail(creatorId))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not found");
+    }
+
+    // ===== GET /admin/creators — getAllCreators returns contacts =====
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void getAllCreators_creatorWithContacts_returnsNonEmptyContacts() {
+        UUID creatorId = UUID.randomUUID();
+        User creatorUser = new User();
+        creatorUser.setId(creatorId);
+        creatorUser.setName("Star Creator");
+        creatorUser.setPhone("+998901234567");
+        creatorUser.setRole(Role.CREATOR);
+        creatorUser.setStatus(UserStatus.ACTIVE);
+
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUserId(creatorId);
+        cp.setUser(creatorUser);
+
+        Page<CreatorProfile> pageMock = mock(Page.class);
+        when(pageMock.getContent()).thenReturn(List.of(cp));
+        when(creatorProfileRepo.findAllWithUser(any())).thenReturn(pageMock);
+        when(portfolioRepo.findPublicWithConsentByCreatorIds(any())).thenReturn(List.of());
+
+        CreatorContact contact = new CreatorContact();
+        contact.setId(UUID.randomUUID());
+        contact.setCreatorId(creatorId);
+        contact.setPhone("+998901234567");
+        contact.setCreatedAt(Instant.now());
+        when(contactRepo.findByCreatorIdIn(List.of(creatorId))).thenReturn(List.of(contact));
+
+        CreatorResponse base = new CreatorResponse();
+        base.setId(creatorId);
+        when(mapper.toCreatorResponse(any(CreatorProfile.class), anyList())).thenReturn(base);
+
+        CreatorContactResponse contactResp = new CreatorContactResponse();
+        contactResp.setId(contact.getId());
+        contactResp.setPhone(contact.getPhone());
+        when(mapper.toContactResponses(anyList())).thenReturn(List.of(contactResp));
+
+        List<CreatorResponse> result = adminService.getAllCreators(0, 10);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getContacts()).hasSize(1);
+        assertThat(result.get(0).getContacts().get(0).getPhone()).isEqualTo("+998901234567");
+        verify(contactRepo).findByCreatorIdIn(List.of(creatorId));
+    }
+
+    // ===== POST /admin/creators/{id}/contacts — addCreatorContact =====
+
+    @Test
+    void addCreatorContact_creatorExists_savesAndReturnsContact() {
+        UUID creatorId = UUID.randomUUID();
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUser(clientUser);
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(cp));
+        when(contactRepo.existsByCreatorIdAndPhone(eq(creatorId), anyString())).thenReturn(false);
+
+        CreatorContact saved = new CreatorContact();
+        saved.setId(UUID.randomUUID());
+        saved.setCreatorId(creatorId);
+        saved.setPhone("+998901234567");
+        saved.setCreatedAt(Instant.now());
+        when(contactRepo.save(any(CreatorContact.class))).thenReturn(saved);
+
+        CreatorContactResponse expected = new CreatorContactResponse();
+        expected.setId(saved.getId());
+        expected.setPhone(saved.getPhone());
+        when(mapper.toContactResponse(saved)).thenReturn(expected);
+
+        AddCreatorContactRequest req = new AddCreatorContactRequest();
+        req.setPhone("+998901234567");
+        req.setLabel("Home");
+
+        CreatorContactResponse result = adminService.addCreatorContact(creatorId, req);
+
+        assertThat(result.getPhone()).isEqualTo("+998901234567");
+        verify(contactRepo).save(any(CreatorContact.class));
+    }
+
+    @Test
+    void addCreatorContact_creatorNotFound_throwsNotFound() {
+        UUID creatorId = UUID.randomUUID();
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.empty());
+
+        AddCreatorContactRequest req = new AddCreatorContactRequest();
+        req.setPhone("+998901234567");
+
+        assertThatThrownBy(() -> adminService.addCreatorContact(creatorId, req))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not found");
+
+        verify(contactRepo, never()).save(any());
+    }
+
+    @Test
+    void addCreatorContact_duplicatePhone_throwsBadRequest() {
+        UUID creatorId = UUID.randomUUID();
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUser(clientUser);
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(cp));
+        when(contactRepo.existsByCreatorIdAndPhone(eq(creatorId), anyString())).thenReturn(true);
+
+        AddCreatorContactRequest req = new AddCreatorContactRequest();
+        req.setPhone("+998901234567");
+
+        assertThatThrownBy(() -> adminService.addCreatorContact(creatorId, req))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("already exists");
+
+        verify(contactRepo, never()).save(any());
+    }
+
+    @Test
+    void addCreatorContact_rawPhoneFormat_normalizesForLookupAndSave() {
+        UUID creatorId = UUID.randomUUID();
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUser(clientUser);
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(cp));
+        when(contactRepo.existsByCreatorIdAndPhone(eq(creatorId), eq("+998901234567"))).thenReturn(false);
+
+        CreatorContact saved = new CreatorContact();
+        saved.setId(UUID.randomUUID());
+        saved.setCreatorId(creatorId);
+        saved.setPhone("+998901234567");
+        saved.setCreatedAt(Instant.now());
+        when(contactRepo.save(any(CreatorContact.class))).thenReturn(saved);
+
+        CreatorContactResponse expected = new CreatorContactResponse();
+        expected.setPhone(saved.getPhone());
+        when(mapper.toContactResponse(saved)).thenReturn(expected);
+
+        AddCreatorContactRequest req = new AddCreatorContactRequest();
+        req.setPhone("998 90 123-45-67");
+        req.setLabel("Work");
+
+        adminService.addCreatorContact(creatorId, req);
+
+        verify(contactRepo).existsByCreatorIdAndPhone(creatorId, "+998901234567");
+        ArgumentCaptor<CreatorContact> cap = ArgumentCaptor.forClass(CreatorContact.class);
+        verify(contactRepo).save(cap.capture());
+        assertThat(cap.getValue().getPhone()).isEqualTo("+998901234567");
+    }
+
+    // ===== DELETE /admin/creators/{id}/contacts/{contactId} =====
+
+    @Test
+    void deleteCreatorContact_wrongCreator_throwsNotFound() {
+        UUID creatorIdA = UUID.randomUUID();
+        UUID creatorIdB = UUID.randomUUID();
+        UUID contactId = UUID.randomUUID();
+
+        // Contact belongs to creatorIdA, but we request deletion as creatorIdB
+        when(contactRepo.findByIdAndCreatorId(contactId, creatorIdB)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminService.deleteCreatorContact(creatorIdB, contactId))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not found");
+
+        verify(contactRepo, never()).delete(any());
+    }
+
+    @Test
+    void deleteCreatorContact_ownContact_deletesSuccessfully() {
+        UUID creatorId = UUID.randomUUID();
+        UUID contactId = UUID.randomUUID();
+
+        CreatorContact contact = new CreatorContact();
+        contact.setId(contactId);
+        contact.setCreatorId(creatorId);
+        when(contactRepo.findByIdAndCreatorId(contactId, creatorId)).thenReturn(Optional.of(contact));
+
+        adminService.deleteCreatorContact(creatorId, contactId);
+
+        verify(contactRepo).delete(contact);
     }
 }

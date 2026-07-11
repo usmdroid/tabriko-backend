@@ -5,8 +5,11 @@ import uz.tabriko.domain.entity.*;
 import uz.tabriko.dto.response.*;
 import uz.tabriko.domain.enums.TransactionStatus;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 @Component
@@ -47,6 +50,11 @@ public class UserMapper {
     }
 
     public CreatorResponse toCreatorResponse(CreatorProfile cp, List<PortfolioItem> portfolio) {
+        return toCreatorResponse(cp, portfolio, List.of());
+    }
+
+    public CreatorResponse toCreatorResponse(CreatorProfile cp, List<PortfolioItem> portfolio,
+                                              List<CreatorServiceOffering> services) {
         CreatorResponse r = new CreatorResponse();
         r.setId(cp.getUserId());
         r.setName(cp.getUser().getName());
@@ -57,14 +65,14 @@ public class UserMapper {
         }
         r.setAvgRating(cp.getAvgRating());
         r.setRatingCount(cp.getRatingCount());
-        r.setPriceFrom(cp.getPriceFrom());
         r.setDeliveryDays(cp.getDeliveryDays());
         r.setTop(cp.isTop());
         r.setExclusive(cp.isExclusive());
         r.setVerified(cp.isVerified());
         r.setAccepting(cp.isAccepting());
         r.setTier(cp.getTier());
-        r.setOptions(cp.getOptions());
+        r.setOptions(new java.util.HashSet<>(cp.getOptions()));
+        applyServicePricing(services, r::setServices, r::setPriceFrom, r::setOriginalPriceFrom, r::setOnSale);
         r.setPortfolio(portfolio.stream().map(this::toPortfolioResponse).collect(Collectors.toList()));
         r.setPhone(cp.getUser().getPhone());
         r.setStatus(cp.getUser().getStatus().name().toLowerCase());
@@ -73,6 +81,11 @@ public class UserMapper {
     }
 
     public CreatorSelfProfileResponse toCreatorSelfProfileResponse(CreatorProfile cp, List<PortfolioItem> portfolio) {
+        return toCreatorSelfProfileResponse(cp, portfolio, List.of());
+    }
+
+    public CreatorSelfProfileResponse toCreatorSelfProfileResponse(CreatorProfile cp, List<PortfolioItem> portfolio,
+                                                                    List<CreatorServiceOffering> services) {
         CreatorSelfProfileResponse r = new CreatorSelfProfileResponse();
         r.setId(cp.getUserId());
         r.setName(cp.getUser().getName());
@@ -83,14 +96,14 @@ public class UserMapper {
         }
         r.setAvgRating(cp.getAvgRating());
         r.setRatingCount(cp.getRatingCount());
-        r.setPriceFrom(cp.getPriceFrom());
         r.setDeliveryDays(cp.getDeliveryDays());
         r.setTop(cp.isTop());
         r.setExclusive(cp.isExclusive());
         r.setVerified(cp.isVerified());
         r.setAccepting(cp.isAccepting());
         r.setTier(cp.getTier());
-        r.setOptions(cp.getOptions());
+        r.setOptions(new java.util.HashSet<>(cp.getOptions()));
+        applyServicePricing(services, r::setServices, r::setPriceFrom, r::setOriginalPriceFrom, r::setOnSale);
         r.setPortfolio(portfolio.stream().map(this::toPortfolioResponse).collect(Collectors.toList()));
         r.setStatus(cp.getUser().getStatus().name().toLowerCase());
         r.setCreatedAt(cp.getUser().getCreatedAt());
@@ -121,6 +134,58 @@ public class UserMapper {
         r.setProfileComplete(missing.isEmpty());
 
         return r;
+    }
+
+    public CreatorServiceResponse toCreatorServiceResponse(CreatorServiceOffering svc) {
+        Instant now = Instant.now();
+        CreatorServiceResponse r = new CreatorServiceResponse();
+        r.setType(svc.getType());
+        r.setPrice(svc.getPrice());
+        r.setEffectivePrice(ServicePricingCalculator.effectivePrice(svc, now));
+        boolean onSale = ServicePricingCalculator.isOnSale(svc, now);
+        r.setOnSale(onSale);
+        if (onSale) {
+            r.setDiscountPercent(ServicePricingCalculator.discountPercent(svc, now));
+            r.setDiscountEndsAt(svc.getDiscountEndsAt());
+        }
+        r.setDeliveryDays(svc.getDeliveryDays());
+        r.setAccepting(svc.isAccepting());
+        return r;
+    }
+
+    private void applyServicePricing(List<CreatorServiceOffering> services,
+                                      Consumer<List<CreatorServiceResponse>> servicesSetter,
+                                      Consumer<BigDecimal> priceFromSetter,
+                                      Consumer<BigDecimal> originalPriceFromSetter,
+                                      Consumer<Boolean> onSaleSetter) {
+        Instant now = Instant.now();
+        servicesSetter.accept(services.stream().map(this::toCreatorServiceResponse).collect(Collectors.toList()));
+
+        List<CreatorServiceOffering> accepting = services.stream()
+                .filter(CreatorServiceOffering::isAccepting)
+                .collect(Collectors.toList());
+        priceFromSetter.accept(accepting.stream()
+                .map(s -> ServicePricingCalculator.effectivePrice(s, now))
+                .min(BigDecimal::compareTo)
+                .orElse(BigDecimal.ZERO));
+        originalPriceFromSetter.accept(accepting.stream()
+                .map(CreatorServiceOffering::getPrice)
+                .min(BigDecimal::compareTo)
+                .orElse(BigDecimal.ZERO));
+        onSaleSetter.accept(accepting.stream().anyMatch(s -> ServicePricingCalculator.isOnSale(s, now)));
+    }
+
+    public CreatorContactResponse toContactResponse(CreatorContact c) {
+        CreatorContactResponse r = new CreatorContactResponse();
+        r.setId(c.getId());
+        r.setPhone(c.getPhone());
+        r.setLabel(c.getLabel());
+        r.setCreatedAt(c.getCreatedAt());
+        return r;
+    }
+
+    public List<CreatorContactResponse> toContactResponses(List<CreatorContact> contacts) {
+        return contacts.stream().map(this::toContactResponse).collect(Collectors.toList());
     }
 
     public CreatorKycResponse toKycResponse(CreatorProfile cp) {

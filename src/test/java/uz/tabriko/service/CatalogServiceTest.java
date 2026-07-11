@@ -16,6 +16,7 @@ import uz.tabriko.domain.entity.User;
 import uz.tabriko.dto.response.CreatorResponse;
 import uz.tabriko.repository.CategoryRepository;
 import uz.tabriko.repository.CreatorProfileRepository;
+import uz.tabriko.repository.CreatorServiceOfferingRepository;
 import uz.tabriko.repository.PortfolioItemRepository;
 
 import java.util.List;
@@ -33,6 +34,7 @@ class CatalogServiceTest {
     @Mock CategoryRepository categoryRepo;
     @Mock CreatorProfileRepository creatorProfileRepo;
     @Mock PortfolioItemRepository portfolioRepo;
+    @Mock CreatorServiceOfferingRepository serviceOfferingRepo;
     @Mock UserMapper mapper;
 
     @InjectMocks CatalogService catalogService;
@@ -63,7 +65,7 @@ class CatalogServiceTest {
         when(creatorProfileRepo.findAllFiltered(any(), any(), any(), any(Pageable.class))).thenReturn(page);
         when(portfolioRepo.findPublicWithConsentByCreatorIds(anyList()))
                 .thenReturn(List.of(portfolioItemFor(creator1), portfolioItemFor(creator2)));
-        when(mapper.toCreatorResponse(any(), anyList())).thenReturn(new CreatorResponse());
+        when(mapper.toCreatorResponse(any(), anyList(), anyList())).thenReturn(new CreatorResponse());
 
         catalogService.getCreators(null, null, 0, 10);
 
@@ -92,7 +94,7 @@ class CatalogServiceTest {
         when(creatorProfileRepo.findTop10()).thenReturn(List.of(profile(creator1), profile(creator2)));
         when(portfolioRepo.findPublicWithConsentByCreatorIds(anyList()))
                 .thenReturn(List.of(portfolioItemFor(creator1)));
-        when(mapper.toCreatorResponse(any(), anyList())).thenReturn(new CreatorResponse());
+        when(mapper.toCreatorResponse(any(), anyList(), anyList())).thenReturn(new CreatorResponse());
 
         catalogService.getTopCreators();
 
@@ -106,7 +108,7 @@ class CatalogServiceTest {
         when(creatorProfileRepo.findForYou(any(Pageable.class))).thenReturn(List.of(profile(creator1)));
         when(portfolioRepo.findPublicWithConsentByCreatorIds(anyList()))
                 .thenReturn(List.of(portfolioItemFor(creator1)));
-        when(mapper.toCreatorResponse(any(), anyList())).thenReturn(new CreatorResponse());
+        when(mapper.toCreatorResponse(any(), anyList(), anyList())).thenReturn(new CreatorResponse());
 
         catalogService.getForYouCreators(5);
 

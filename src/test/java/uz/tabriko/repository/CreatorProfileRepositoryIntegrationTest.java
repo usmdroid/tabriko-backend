@@ -56,6 +56,11 @@ class CreatorProfileRepositoryIntegrationTest extends PostgresTestSupport {
                         + "'10000000-0000-0000-0000-000000000002',"
                         + "'10000000-0000-0000-0000-000000000003')").executeUpdate();
         em.getEntityManager().createNativeQuery(
+                "DELETE FROM creator_service WHERE creator_id IN ("
+                        + "'10000000-0000-0000-0000-000000000001',"
+                        + "'10000000-0000-0000-0000-000000000002',"
+                        + "'10000000-0000-0000-0000-000000000003')").executeUpdate();
+        em.getEntityManager().createNativeQuery(
                 "DELETE FROM users WHERE id IN ("
                         + "'10000000-0000-0000-0000-000000000001',"
                         + "'10000000-0000-0000-0000-000000000002',"

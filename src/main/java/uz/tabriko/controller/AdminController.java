@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import uz.tabriko.common.response.BaseResponse;
+import uz.tabriko.dto.request.AddCreatorContactRequest;
 import uz.tabriko.dto.request.AddCreatorRequest;
 import uz.tabriko.dto.request.AdminCategoryRequest;
 import uz.tabriko.dto.request.AdminOccasionRequest;
@@ -166,6 +167,32 @@ public class AdminController {
     @PreAuthorize("hasAnyRole('SUPERADMIN', 'MODERATOR')")
     public ResponseEntity<BaseResponse<?>> verifyCreator(@PathVariable UUID id) {
         return ResponseEntity.ok(BaseResponse.ok(adminService.verifyCreator(id)));
+    }
+
+    @GetMapping("/creators/{id}")
+    @Operation(summary = "Get a single creator's detail, including contacts")
+    public ResponseEntity<BaseResponse<?>> getCreator(@PathVariable UUID id) {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.getCreatorDetail(id)));
+    }
+
+    @PostMapping("/creators/{id}/contacts")
+    @Operation(summary = "Add an extra contact phone for a creator")
+    public ResponseEntity<BaseResponse<?>> addCreatorContact(
+            @PathVariable UUID id,
+            @Valid @RequestBody AddCreatorContactRequest req
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(BaseResponse.created(adminService.addCreatorContact(id, req)));
+    }
+
+    @DeleteMapping("/creators/{id}/contacts/{contactId}")
+    @Operation(summary = "Delete a creator's contact phone")
+    public ResponseEntity<BaseResponse<?>> deleteCreatorContact(
+            @PathVariable UUID id,
+            @PathVariable UUID contactId
+    ) {
+        adminService.deleteCreatorContact(id, contactId);
+        return ResponseEntity.ok(BaseResponse.ok());
     }
 
     @PostMapping("/creators/{id}/flag")

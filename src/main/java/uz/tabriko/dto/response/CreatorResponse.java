@@ -6,6 +6,7 @@ import uz.tabriko.domain.enums.OrderOption;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -21,6 +22,8 @@ public class CreatorResponse {
     private BigDecimal avgRating;
     private int ratingCount;
     private BigDecimal priceFrom;
+    private BigDecimal originalPriceFrom;
+    private boolean onSale;
     private int deliveryDays;
     private boolean isTop;
     private boolean isExclusive;
@@ -28,7 +31,9 @@ public class CreatorResponse {
     private boolean accepting;
     private CreatorTier tier;
     private Set<OrderOption> options;
+    private List<CreatorServiceResponse> services;
     private List<PortfolioItemResponse> portfolio;
+    private List<CreatorContactResponse> contacts = new ArrayList<>();
     private String status;
     private Instant createdAt;
 }

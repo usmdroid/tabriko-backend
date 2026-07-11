@@ -20,12 +20,15 @@ public class CreatorSelfProfileResponse {
     private BigDecimal avgRating;
     private int ratingCount;
     private BigDecimal priceFrom;
+    private BigDecimal originalPriceFrom;
+    private boolean onSale;
     private int deliveryDays;
     private boolean isTop;
     private boolean isExclusive;
     private boolean isVerified;
     private boolean accepting;
     private Set<OrderOption> options;
+    private List<CreatorServiceResponse> services;
     private List<PortfolioItemResponse> portfolio;
     private String status;
     private Instant createdAt;

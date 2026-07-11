@@ -9,8 +9,10 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.common.util.HmacUtil;
 import uz.tabriko.domain.entity.CreatorProfile;
+import uz.tabriko.domain.entity.CreatorServiceOffering;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.entity.WalletTransaction;
+import uz.tabriko.domain.enums.DiscountType;
 import uz.tabriko.domain.enums.OrderOption;
 import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.domain.enums.Role;
@@ -26,6 +28,7 @@ import uz.tabriko.dto.response.OrderResponse;
 import uz.tabriko.dto.response.TopUpInitResponse;
 import uz.tabriko.infrastructure.payment.PaymentProviderType;
 import uz.tabriko.repository.CreatorProfileRepository;
+import uz.tabriko.repository.CreatorServiceOfferingRepository;
 import uz.tabriko.repository.UserRepository;
 import uz.tabriko.repository.WalletTransactionRepository;
 import uz.tabriko.support.PostgresTestSupport;
@@ -52,6 +55,7 @@ class OrderMoneyLifecycleIntegrationTest extends PostgresTestSupport {
     @Autowired private WalletService walletService;
     @Autowired private UserRepository userRepo;
     @Autowired private CreatorProfileRepository creatorProfileRepo;
+    @Autowired private CreatorServiceOfferingRepository serviceOfferingRepo;
     @Autowired private WalletTransactionRepository walletTxRepo;
 
     private static int counter = 0;
@@ -73,6 +77,16 @@ class OrderMoneyLifecycleIntegrationTest extends PostgresTestSupport {
         cp.setVerified(true);
         cp.setProfileComplete(true);
         creatorProfileRepo.save(cp);
+
+        CreatorServiceOffering offering = new CreatorServiceOffering();
+        offering.setCreator(creator);
+        offering.setType(OrderType.VIDEO);
+        offering.setPrice(priceFrom);
+        offering.setDeliveryDays(3);
+        offering.setAccepting(true);
+        offering.setDiscountType(DiscountType.NONE);
+        serviceOfferingRepo.save(offering);
+
         return creator;
     }
 

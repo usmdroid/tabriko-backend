@@ -34,6 +34,7 @@ public class OrderService {
     private final DeliveryRepository deliveryRepo;
     private final WalletTransactionRepository walletTxRepo;
     private final CreatorProfileRepository creatorProfileRepo;
+    private final CreatorServiceOfferingRepository serviceOfferingRepo;
     private final UserRepository userRepo;
     private final PaymentGateway paymentGateway;
     private final MediaStorageService mediaStorage;
@@ -52,11 +53,16 @@ public class OrderService {
         if (creator.getRole() != Role.CREATOR) {
             throw ApiException.badRequest("Target user is not a creator");
         }
-        CreatorProfile profile = creatorProfileRepo.findByUserId(creator.getId())
+        creatorProfileRepo.findByUserId(creator.getId())
                 .orElseThrow(() -> ApiException.notFound("Creator profile not found"));
+        CreatorServiceOffering serviceOffering = serviceOfferingRepo.findByCreator_IdAndType(creator.getId(), req.getType())
+                .orElseThrow(() -> ApiException.notFound("Creator does not offer this service type"));
+        if (!serviceOffering.isAccepting()) {
+            throw ApiException.badRequest("Creator is not accepting orders for this service type");
+        }
 
-        BigDecimal price = profile.getPriceFrom();
-        Instant deadline = Instant.now().plus(profile.getDeliveryDays(), ChronoUnit.DAYS);
+        BigDecimal price = ServicePricingCalculator.effectivePrice(serviceOffering, Instant.now());
+        Instant deadline = Instant.now().plus(serviceOffering.getDeliveryDays(), ChronoUnit.DAYS);
 
         Order order = new Order();
         order.setClient(client);

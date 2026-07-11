@@ -7,26 +7,35 @@ import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.Category;
 import uz.tabriko.domain.entity.CreatorProfile;
+import uz.tabriko.domain.entity.CreatorServiceOffering;
 import uz.tabriko.domain.entity.Delivery;
 import uz.tabriko.domain.entity.Order;
 import uz.tabriko.domain.entity.PortfolioItem;
+import uz.tabriko.domain.enums.DiscountType;
+import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.dto.request.UpdateCreatorKycRequest;
 import uz.tabriko.dto.request.UpdateCreatorProfileRequest;
+import uz.tabriko.dto.request.UpdateCreatorServiceRequest;
 import uz.tabriko.dto.request.UpdatePayoutRequest;
 import uz.tabriko.dto.request.UpdateSocialRequest;
 import uz.tabriko.dto.response.CreatorKycResponse;
 import uz.tabriko.dto.response.CreatorResponse;
 import uz.tabriko.dto.response.CreatorSelfProfileResponse;
+import uz.tabriko.dto.response.CreatorServiceResponse;
 import uz.tabriko.dto.response.EarningsResponse;
 import uz.tabriko.dto.response.PortfolioItemResponse;
 import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.repository.CategoryRepository;
 import uz.tabriko.repository.CreatorProfileRepository;
+import uz.tabriko.repository.CreatorServiceOfferingRepository;
 import uz.tabriko.repository.DeliveryRepository;
 import uz.tabriko.repository.OrderRepository;
 import uz.tabriko.repository.PortfolioItemRepository;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -39,6 +48,7 @@ public class CreatorService {
     private final CategoryRepository categoryRepo;
     private final OrderRepository orderRepo;
     private final DeliveryRepository deliveryRepo;
+    private final CreatorServiceOfferingRepository serviceOfferingRepo;
     private final MediaStorageService mediaStorage;
     private final WalletService walletService;
     private final UserMapper mapper;
@@ -48,7 +58,12 @@ public class CreatorService {
         CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
             .orElseThrow(() -> ApiException.notFound("Creator profile not found"));
         List<PortfolioItem> items = portfolioRepo.findByCreatorId(creatorId);
-        return mapper.toCreatorSelfProfileResponse(cp, items);
+        return toSelfProfileResponse(cp, items);
+    }
+
+    private CreatorSelfProfileResponse toSelfProfileResponse(CreatorProfile cp, List<PortfolioItem> items) {
+        List<CreatorServiceOffering> services = serviceOfferingRepo.findByCreator_Id(cp.getUserId());
+        return mapper.toCreatorSelfProfileResponse(cp, items, services);
     }
 
     @Transactional
@@ -73,7 +88,7 @@ public class CreatorService {
 
         creatorProfileRepo.save(cp);
         List<PortfolioItem> items = portfolioRepo.findByCreatorId(creatorId);
-        return mapper.toCreatorSelfProfileResponse(cp, items);
+        return toSelfProfileResponse(cp, items);
     }
 
     @Transactional
@@ -91,7 +106,7 @@ public class CreatorService {
 
         recomputeProfileComplete(cp);
         creatorProfileRepo.save(cp);
-        return mapper.toCreatorSelfProfileResponse(cp, portfolioRepo.findByCreatorId(creatorId));
+        return toSelfProfileResponse(cp, portfolioRepo.findByCreatorId(creatorId));
     }
 
     @Transactional
@@ -111,7 +126,7 @@ public class CreatorService {
 
         recomputeProfileComplete(cp);
         creatorProfileRepo.save(cp);
-        return mapper.toCreatorSelfProfileResponse(cp, portfolioRepo.findByCreatorId(creatorId));
+        return toSelfProfileResponse(cp, portfolioRepo.findByCreatorId(creatorId));
     }
 
     @Transactional
@@ -123,7 +138,7 @@ public class CreatorService {
         if (req.getInstagram() != null) cp.setSocialInstagram(req.getInstagram());
 
         creatorProfileRepo.save(cp);
-        return mapper.toCreatorSelfProfileResponse(cp, portfolioRepo.findByCreatorId(creatorId));
+        return toSelfProfileResponse(cp, portfolioRepo.findByCreatorId(creatorId));
     }
 
     public void recomputeProfileComplete(CreatorProfile cp) {
@@ -258,5 +273,88 @@ public class CreatorService {
         recomputeProfileComplete(cp);
         creatorProfileRepo.save(cp);
         return mapper.toKycResponse(cp);
+    }
+
+    // --- Per-service pricing + discounts (creator_service CRUD) ---
+
+    @Transactional
+    public List<CreatorServiceResponse> getMyServices(UUID creatorId) {
+        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
+            .orElseThrow(() -> ApiException.notFound("Creator profile not found"));
+
+        Map<OrderType, CreatorServiceOffering> byType = serviceOfferingRepo.findByCreator_Id(creatorId).stream()
+            .collect(Collectors.toMap(CreatorServiceOffering::getType, s -> s));
+
+        List<CreatorServiceOffering> result = new ArrayList<>();
+        for (OrderType type : OrderType.values()) {
+            CreatorServiceOffering svc = byType.get(type);
+            if (svc == null) {
+                svc = defaultServiceOffering(cp, type);
+                serviceOfferingRepo.save(svc);
+            }
+            result.add(svc);
+        }
+        return result.stream().map(mapper::toCreatorServiceResponse).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public CreatorServiceResponse updateService(UUID creatorId, OrderType type, UpdateCreatorServiceRequest req) {
+        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
+            .orElseThrow(() -> ApiException.notFound("Creator profile not found"));
+
+        if (req.getPrice() == null || req.getPrice().signum() <= 0) {
+            throw ApiException.badRequest("price must be greater than 0");
+        }
+        DiscountType discountType = req.getDiscountType() == null ? DiscountType.NONE : req.getDiscountType();
+        if (discountType == DiscountType.PERCENT) {
+            if (req.getDiscountValue() == null
+                || req.getDiscountValue().compareTo(BigDecimal.ONE) < 0
+                || req.getDiscountValue().compareTo(new BigDecimal("99")) > 0) {
+                throw ApiException.badRequest("discountValue must be between 1 and 99 for PERCENT discount");
+            }
+        } else if (discountType == DiscountType.PRICE) {
+            if (req.getDiscountValue() == null
+                    || req.getDiscountValue().signum() <= 0
+                    || req.getDiscountValue().compareTo(req.getPrice()) >= 0) {
+                throw ApiException.badRequest("discountValue must be > 0 and < price for PRICE discount");
+            }
+        }
+        if (req.getDiscountStartsAt() != null && req.getDiscountEndsAt() != null
+            && !req.getDiscountEndsAt().isAfter(req.getDiscountStartsAt())) {
+            throw ApiException.badRequest("discountEndsAt must be after discountStartsAt");
+        }
+
+        CreatorServiceOffering svc = serviceOfferingRepo.findByCreator_IdAndType(creatorId, type)
+            .orElseGet(() -> {
+                CreatorServiceOffering s = new CreatorServiceOffering();
+                s.setCreator(cp.getUser());
+                s.setType(type);
+                return s;
+            });
+
+        svc.setPrice(req.getPrice());
+        svc.setDeliveryDays(req.getDeliveryDays());
+        svc.setAccepting(req.getAccepting());
+        svc.setDiscountType(discountType);
+        svc.setDiscountValue(discountType == DiscountType.NONE ? null : req.getDiscountValue());
+        svc.setDiscountStartsAt(req.getDiscountStartsAt());
+        svc.setDiscountEndsAt(req.getDiscountEndsAt());
+        svc.setUpdatedAt(java.time.Instant.now());
+
+        serviceOfferingRepo.save(svc);
+        return mapper.toCreatorServiceResponse(svc);
+    }
+
+    private CreatorServiceOffering defaultServiceOffering(CreatorProfile cp, OrderType type) {
+        CreatorServiceOffering svc = new CreatorServiceOffering();
+        svc.setCreator(cp.getUser());
+        svc.setType(type);
+        BigDecimal defaultPrice = cp.getPriceFrom() != null && cp.getPriceFrom().signum() > 0
+            ? cp.getPriceFrom() : BigDecimal.ONE;
+        svc.setPrice(defaultPrice);
+        svc.setDeliveryDays(cp.getDeliveryDays() > 0 ? cp.getDeliveryDays() : 3);
+        svc.setAccepting(false);
+        svc.setDiscountType(DiscountType.NONE);
+        return svc;
     }
 }

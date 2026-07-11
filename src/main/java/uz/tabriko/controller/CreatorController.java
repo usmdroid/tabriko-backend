@@ -12,13 +12,16 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.response.BaseResponse;
+import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.dto.request.UpdateCreatorKycRequest;
 import uz.tabriko.dto.request.UpdateCreatorProfileRequest;
+import uz.tabriko.dto.request.UpdateCreatorServiceRequest;
 import uz.tabriko.dto.request.UpdatePayoutRequest;
 import uz.tabriko.dto.request.UpdatePortfolioVisibilityRequest;
 import uz.tabriko.dto.request.UpdateSocialRequest;
 import uz.tabriko.dto.response.CreatorKycResponse;
 import uz.tabriko.dto.response.CreatorSelfProfileResponse;
+import uz.tabriko.dto.response.CreatorServiceResponse;
 import uz.tabriko.dto.response.EarningsResponse;
 import uz.tabriko.dto.response.PortfolioItemResponse;
 import uz.tabriko.security.UserPrincipal;
@@ -161,5 +164,26 @@ public class CreatorController {
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         return ResponseEntity.ok(BaseResponse.ok(creatorService.getEarnings(principal.getUserId())));
+    }
+
+    // --- Per-service pricing + discounts ---
+
+    @GetMapping("/services")
+    @Operation(summary = "Get own per-service pricing and discount configuration (VIDEO/AUDIO)")
+    public ResponseEntity<BaseResponse<List<CreatorServiceResponse>>> getMyServices(
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(creatorService.getMyServices(principal.getUserId())));
+    }
+
+    @PatchMapping("/services/{type}")
+    @Operation(summary = "Update price, delivery days, accepting flag and discount configuration for a service type")
+    public ResponseEntity<BaseResponse<CreatorServiceResponse>> updateService(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable OrderType type,
+            @Valid @RequestBody UpdateCreatorServiceRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(
+                creatorService.updateService(principal.getUserId(), type, req)));
     }
 }

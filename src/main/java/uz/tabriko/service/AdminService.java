@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.common.util.PhoneUtil;
 import uz.tabriko.domain.entity.Category;
+import uz.tabriko.domain.entity.CreatorContact;
 import uz.tabriko.domain.entity.CreatorProfile;
 import uz.tabriko.domain.entity.Order;
 import uz.tabriko.domain.entity.PlatformSettingsEntity;
@@ -20,6 +21,7 @@ import uz.tabriko.domain.enums.Role;
 import uz.tabriko.domain.enums.TransactionStatus;
 import uz.tabriko.domain.enums.TransactionType;
 import uz.tabriko.domain.enums.UserStatus;
+import uz.tabriko.dto.request.AddCreatorContactRequest;
 import uz.tabriko.dto.request.AddCreatorRequest;
 import uz.tabriko.dto.request.AdminCategoryRequest;
 import uz.tabriko.dto.response.*;
@@ -46,6 +48,7 @@ public class AdminService {
     private final ReportRepository reportRepo;
     private final PlatformSettingsRepository settingsRepo;
     private final WalletTransactionRepository walletTxRepo;
+    private final CreatorContactRepository contactRepo;
     private final PaymentGateway paymentGateway;
     private final NotificationService notificationService;
     private final UserMapper mapper;
@@ -109,8 +112,17 @@ public class AdminService {
         Map<UUID, List<uz.tabriko.domain.entity.PortfolioItem>> portfolioByCreator =
                 portfolioRepo.findPublicWithConsentByCreatorIds(creatorIds).stream()
                         .collect(Collectors.groupingBy(p -> p.getCreator().getId()));
+        Map<UUID, List<CreatorContact>> contactsByCreator =
+                contactRepo.findByCreatorIdIn(creatorIds).stream()
+                        .collect(Collectors.groupingBy(CreatorContact::getCreatorId));
         return content.stream()
-                .map(cp -> mapper.toCreatorResponse(cp, portfolioByCreator.getOrDefault(cp.getUserId(), List.of())))
+                .map(cp -> {
+                    CreatorResponse r = mapper.toCreatorResponse(cp,
+                            portfolioByCreator.getOrDefault(cp.getUserId(), List.of()));
+                    r.setContacts(mapper.toContactResponses(
+                            contactsByCreator.getOrDefault(cp.getUserId(), List.of())));
+                    return r;
+                })
                 .collect(Collectors.toList());
     }
 
@@ -261,6 +273,40 @@ public class AdminService {
         }
         creatorProfileRepo.save(cp);
         return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(creatorId));
+    }
+
+    // --- Creator contacts ---
+
+    @Transactional(readOnly = true)
+    public CreatorResponse getCreatorDetail(UUID creatorId) {
+        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
+                .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        CreatorResponse r = mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(creatorId));
+        r.setContacts(mapper.toContactResponses(contactRepo.findByCreatorIdOrderByCreatedAtAsc(creatorId)));
+        return r;
+    }
+
+    @Transactional
+    public CreatorContactResponse addCreatorContact(UUID creatorId, AddCreatorContactRequest req) {
+        creatorProfileRepo.findByUserId(creatorId)
+                .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        String phone = PhoneUtil.normalize(req.getPhone());
+        if (contactRepo.existsByCreatorIdAndPhone(creatorId, phone)) {
+            throw ApiException.badRequest("Contact with this phone already exists");
+        }
+        CreatorContact contact = new CreatorContact();
+        contact.setCreatorId(creatorId);
+        contact.setPhone(phone);
+        contact.setLabel(req.getLabel());
+        CreatorContact saved = contactRepo.save(contact);
+        return mapper.toContactResponse(saved);
+    }
+
+    @Transactional
+    public void deleteCreatorContact(UUID creatorId, UUID contactId) {
+        CreatorContact contact = contactRepo.findByIdAndCreatorId(contactId, creatorId)
+                .orElseThrow(() -> ApiException.notFound("Contact not found"));
+        contactRepo.delete(contact);
     }
 
     // --- Order refund ---

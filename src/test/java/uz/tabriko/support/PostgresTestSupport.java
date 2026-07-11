@@ -18,12 +18,22 @@ import org.testcontainers.containers.PostgreSQLContainer;
 // skipped would misreport a real Docker-dependent regression as "0 failures"); pass
 // -DskipDockerTests=true to opt into the old soft-skip behavior on dev machines that
 // intentionally don't run Docker.
+//
+// Local-Postgres fallback: when Docker is unavailable, set TEST_DB_URL (e.g.
+// jdbc:postgresql://localhost:5432/tabriko_test) plus optional TEST_DB_USERNAME /
+// TEST_DB_PASSWORD env vars to bypass Testcontainers entirely and run against a
+// pre-provisioned local Postgres instance.
 public abstract class PostgresTestSupport {
 
     protected static PostgreSQLContainer<?> postgres;
 
     @BeforeAll
     static void startContainerIfDockerAvailable() {
+        // If a local Postgres override is configured, skip Docker entirely.
+        if (System.getenv("TEST_DB_URL") != null) {
+            return;
+        }
+
         boolean dockerAvailable;
         try {
             dockerAvailable = DockerClientFactory.instance().isDockerAvailable();
@@ -35,7 +45,8 @@ public abstract class PostgresTestSupport {
                 Assumptions.abort("Docker is not available; skipping Testcontainers-backed test (skipDockerTests=true)");
             }
             Assertions.fail("Docker is not available but is required for Testcontainers-backed tests. "
-                    + "Start Docker, or explicitly opt out with -DskipDockerTests=true "
+                    + "Start Docker, set TEST_DB_URL to a local Postgres instance, "
+                    + "or explicitly opt out with -DskipDockerTests=true "
                     + "(these tests will then be skipped instead of verified).");
         }
 
@@ -48,9 +59,18 @@ public abstract class PostgresTestSupport {
 
     @DynamicPropertySource
     static void datasourceProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> postgres.getJdbcUrl());
-        registry.add("spring.datasource.username", () -> postgres.getUsername());
-        registry.add("spring.datasource.password", () -> postgres.getPassword());
+        String testDbUrl = System.getenv("TEST_DB_URL");
+        if (testDbUrl != null) {
+            registry.add("spring.datasource.url", () -> testDbUrl);
+            registry.add("spring.datasource.username",
+                    () -> System.getenv().getOrDefault("TEST_DB_USERNAME", "tabriko"));
+            registry.add("spring.datasource.password",
+                    () -> System.getenv().getOrDefault("TEST_DB_PASSWORD", "tabriko"));
+        } else {
+            registry.add("spring.datasource.url", () -> postgres.getJdbcUrl());
+            registry.add("spring.datasource.username", () -> postgres.getUsername());
+            registry.add("spring.datasource.password", () -> postgres.getPassword());
+        }
         // Required (no-default) secrets — only needed by @SpringBootTest subclasses that boot
         // the full context, but harmless to set unconditionally for @DataJpaTest subclasses too.
         registry.add("app.jwt.access-secret", () -> "test-access-secret-key-long-enough-for-hmac-sha256-0123456789");

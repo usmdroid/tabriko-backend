@@ -37,6 +37,7 @@ class OrderServiceTest {
     @Mock DeliveryRepository deliveryRepo;
     @Mock WalletTransactionRepository walletTxRepo;
     @Mock CreatorProfileRepository creatorProfileRepo;
+    @Mock CreatorServiceOfferingRepository serviceOfferingRepo;
     @Mock UserRepository userRepo;
     @Mock PaymentGateway paymentGateway;
     @Mock MediaStorageService mediaStorage;
@@ -90,9 +91,18 @@ class OrderServiceTest {
         profile.setPriceFrom(new BigDecimal("100.00"));
         profile.setDeliveryDays(3);
 
+        CreatorServiceOffering offering = new CreatorServiceOffering();
+        offering.setCreator(creator);
+        offering.setType(OrderType.VIDEO);
+        offering.setPrice(new BigDecimal("100.00"));
+        offering.setDeliveryDays(3);
+        offering.setAccepting(true);
+        offering.setDiscountType(DiscountType.NONE);
+
         when(userRepo.findById(clientId)).thenReturn(Optional.of(client));
         when(userRepo.findById(creatorId)).thenReturn(Optional.of(creator));
         when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(profile));
+        when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.VIDEO)).thenReturn(Optional.of(offering));
         when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(paymentGateway.hold(any(), any(), any())).thenReturn(PaymentResult.ok("mock-tx"));
         when(mapper.toOrderResponse(any(), any())).thenReturn(new OrderResponse());
@@ -111,6 +121,95 @@ class OrderServiceTest {
         assertThat(holdTx.getType()).isEqualTo(TransactionType.HOLD);
         assertThat(holdTx.getAmount()).isEqualByComparingTo("100.00");
         assertThat(holdTx.getStatus()).isEqualTo(TransactionStatus.COMPLETED);
+    }
+
+    // ===== CREATE ORDER — must charge the effective (discounted) price, not the original =====
+
+    @Test
+    void createOrder_usesEffectivePrice_whenPercentDiscountActive() {
+        CreateOrderRequest req = new CreateOrderRequest();
+        req.setCreatorId(creatorId);
+        req.setType(OrderType.VIDEO);
+        req.setOption(OrderOption.SHER);
+
+        CreatorProfile profile = new CreatorProfile();
+        profile.setUser(creator);
+
+        CreatorServiceOffering offering = new CreatorServiceOffering();
+        offering.setCreator(creator);
+        offering.setType(OrderType.VIDEO);
+        offering.setPrice(new BigDecimal("100.00"));
+        offering.setDeliveryDays(4);
+        offering.setAccepting(true);
+        offering.setDiscountType(DiscountType.PERCENT);
+        offering.setDiscountValue(new BigDecimal("20"));
+
+        when(userRepo.findById(clientId)).thenReturn(Optional.of(client));
+        when(userRepo.findById(creatorId)).thenReturn(Optional.of(creator));
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(profile));
+        when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.VIDEO)).thenReturn(Optional.of(offering));
+        when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(paymentGateway.hold(any(), any(), any())).thenReturn(PaymentResult.ok("mock-tx"));
+        when(mapper.toOrderResponse(any(), any())).thenReturn(new OrderResponse());
+
+        orderService.createOrder(clientId, req);
+
+        // 100.00 - 20% = 80.00 — the discounted price must be charged, never the original 100.00
+        ArgumentCaptor<BigDecimal> amountCap = ArgumentCaptor.forClass(BigDecimal.class);
+        verify(paymentGateway).hold(eq(clientId), amountCap.capture(), any());
+        assertThat(amountCap.getValue()).isEqualByComparingTo("80.00");
+
+        ArgumentCaptor<Order> orderCap = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepo).save(orderCap.capture());
+        assertThat(orderCap.getValue().getPrice()).isEqualByComparingTo("80.00");
+    }
+
+    @Test
+    void createOrder_rejectsWhenServiceOfferingNotAccepting() {
+        CreateOrderRequest req = new CreateOrderRequest();
+        req.setCreatorId(creatorId);
+        req.setType(OrderType.VIDEO);
+        req.setOption(OrderOption.SHER);
+
+        CreatorProfile profile = new CreatorProfile();
+        profile.setUser(creator);
+
+        CreatorServiceOffering offering = new CreatorServiceOffering();
+        offering.setCreator(creator);
+        offering.setType(OrderType.VIDEO);
+        offering.setPrice(new BigDecimal("100.00"));
+        offering.setAccepting(false);
+
+        when(userRepo.findById(clientId)).thenReturn(Optional.of(client));
+        when(userRepo.findById(creatorId)).thenReturn(Optional.of(creator));
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(profile));
+        when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.VIDEO)).thenReturn(Optional.of(offering));
+
+        assertThatThrownBy(() -> orderService.createOrder(clientId, req))
+            .isInstanceOf(ApiException.class);
+
+        verify(paymentGateway, never()).hold(any(), any(), any());
+    }
+
+    @Test
+    void createOrder_rejectsWhenServiceTypeNotOffered() {
+        CreateOrderRequest req = new CreateOrderRequest();
+        req.setCreatorId(creatorId);
+        req.setType(OrderType.AUDIO);
+        req.setOption(OrderOption.SHER);
+
+        CreatorProfile profile = new CreatorProfile();
+        profile.setUser(creator);
+
+        when(userRepo.findById(clientId)).thenReturn(Optional.of(client));
+        when(userRepo.findById(creatorId)).thenReturn(Optional.of(creator));
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(profile));
+        when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.AUDIO)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orderService.createOrder(clientId, req))
+            .isInstanceOf(ApiException.class);
+
+        verify(paymentGateway, never()).hold(any(), any(), any());
     }
 
     // ===== DELIVER ORDER — gate: profileComplete required =====
