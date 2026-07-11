@@ -7,9 +7,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.entity.UserDevice;
 import uz.tabriko.domain.enums.Platform;
+import uz.tabriko.repository.PlatformSettingsRepository;
 import uz.tabriko.repository.UserDeviceRepository;
 import uz.tabriko.repository.UserRepository;
 
@@ -26,6 +28,7 @@ class UserServiceTest {
 
     @Mock UserRepository userRepo;
     @Mock UserDeviceRepository userDeviceRepo;
+    @Mock PlatformSettingsRepository settingsRepo;
     @Mock UserMapper userMapper;
 
     @InjectMocks UserService userService;
@@ -41,13 +44,14 @@ class UserServiceTest {
         when(userRepo.findById(userId)).thenReturn(Optional.of(user));
         when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(userDeviceRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(settingsRepo.findById(1)).thenReturn(Optional.of(new PlatformSettingsEntity()));
     }
 
     @Test
     void registerFcmToken_newToken_createsDeviceRow() {
         when(userDeviceRepo.findByFcmToken("new-token")).thenReturn(Optional.empty());
 
-        userService.registerFcmToken(userId, "new-token", Platform.ANDROID, "1.0.0", null, null);
+        userService.registerFcmToken(userId, "new-token", Platform.ANDROID, "1.0.0", null, null, null, false);
 
         ArgumentCaptor<UserDevice> deviceCaptor = ArgumentCaptor.forClass(UserDevice.class);
         verify(userDeviceRepo).save(deviceCaptor.capture());
@@ -70,7 +74,7 @@ class UserServiceTest {
 
         when(userDeviceRepo.findByFcmToken("existing-token")).thenReturn(Optional.of(existing));
 
-        userService.registerFcmToken(userId, "existing-token", Platform.ANDROID, "2.0.0", null, null);
+        userService.registerFcmToken(userId, "existing-token", Platform.ANDROID, "2.0.0", null, null, null, false);
 
         ArgumentCaptor<UserDevice> deviceCaptor = ArgumentCaptor.forClass(UserDevice.class);
         verify(userDeviceRepo).save(deviceCaptor.capture());
@@ -94,7 +98,7 @@ class UserServiceTest {
 
         when(userDeviceRepo.findByFcmToken("shared-token")).thenReturn(Optional.of(existing));
 
-        userService.registerFcmToken(userId, "shared-token", Platform.IOS, "1.0.0", null, null);
+        userService.registerFcmToken(userId, "shared-token", Platform.IOS, "1.0.0", null, null, null, false);
 
         ArgumentCaptor<UserDevice> deviceCaptor = ArgumentCaptor.forClass(UserDevice.class);
         verify(userDeviceRepo).save(deviceCaptor.capture());
@@ -105,7 +109,7 @@ class UserServiceTest {
     void registerFcmToken_alsoUpdatesUserFcmTokenField() {
         when(userDeviceRepo.findByFcmToken("my-token")).thenReturn(Optional.empty());
 
-        userService.registerFcmToken(userId, "my-token", Platform.ANDROID, "1.0.0", null, null);
+        userService.registerFcmToken(userId, "my-token", Platform.ANDROID, "1.0.0", null, null, null, false);
 
         assertThat(user.getFcmToken()).isEqualTo("my-token");
         verify(userRepo).save(user);
@@ -115,7 +119,7 @@ class UserServiceTest {
     void registerFcmToken_withDeviceNameAndOsVersion_persistsNewFields() {
         when(userDeviceRepo.findByFcmToken("token-x")).thenReturn(Optional.empty());
 
-        userService.registerFcmToken(userId, "token-x", Platform.IOS, "2.1.0", "iPhone 14", "iOS 16.5");
+        userService.registerFcmToken(userId, "token-x", Platform.IOS, "2.1.0", "iPhone 14", "iOS 16.5", null, false);
 
         ArgumentCaptor<UserDevice> deviceCaptor = ArgumentCaptor.forClass(UserDevice.class);
         verify(userDeviceRepo).save(deviceCaptor.capture());
@@ -137,7 +141,7 @@ class UserServiceTest {
 
         when(userDeviceRepo.findByFcmToken("token-y")).thenReturn(Optional.of(existing));
 
-        userService.registerFcmToken(userId, "token-y", Platform.ANDROID, "2.0.0", "New Phone", "Android 14");
+        userService.registerFcmToken(userId, "token-y", Platform.ANDROID, "2.0.0", "New Phone", "Android 14", null, false);
 
         ArgumentCaptor<UserDevice> deviceCaptor = ArgumentCaptor.forClass(UserDevice.class);
         verify(userDeviceRepo).save(deviceCaptor.capture());

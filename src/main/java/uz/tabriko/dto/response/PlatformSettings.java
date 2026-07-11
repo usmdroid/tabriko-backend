@@ -7,4 +7,5 @@ public class PlatformSettings {
     private Boolean ordersOpen;
     private Boolean maintenanceMode;
     private Boolean registrationOpen;
+    private Boolean blockRootedDevices;
 }

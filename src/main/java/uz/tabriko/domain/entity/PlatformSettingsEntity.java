@@ -22,4 +22,7 @@ public class PlatformSettingsEntity {
 
     @Column(name = "registration_open", nullable = false)
     private boolean registrationOpen = true;
+
+    @Column(name = "block_rooted_devices", nullable = false)
+    private boolean blockRootedDevices = false;
 }

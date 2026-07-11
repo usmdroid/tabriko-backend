@@ -6,18 +6,16 @@ import lombok.Data;
 import uz.tabriko.domain.enums.Platform;
 
 @Data
-public class RegisterFcmTokenRequest {
+public class AttestRequest {
     @NotBlank
-    private String token;
+    private String deviceId;
 
     @NotNull
     private Platform platform;
 
     @NotBlank
-    private String appVersion;
+    private String integrityToken;
 
-    private String deviceName;
-    private String osVersion;
-    private String deviceId;
-    private boolean rooted;
+    @NotBlank
+    private String nonce;
 }

@@ -72,6 +72,20 @@ app:
       per-ip-max: ${OTP_RATE_LIMIT_PER_IP:10}
       per-ip-window-seconds: ${OTP_RATE_LIMIT_IP_WINDOW_SECONDS:900}
 
+  login:
+    rate-limit:
+      per-phone-max: ${LOGIN_RATE_LIMIT_PER_PHONE:10}
+      per-phone-window-seconds: ${LOGIN_RATE_LIMIT_PHONE_WINDOW_SECONDS:60}
+      per-ip-max: ${LOGIN_RATE_LIMIT_PER_IP:30}
+      per-ip-window-seconds: ${LOGIN_RATE_LIMIT_IP_WINDOW_SECONDS:900}
+
+  attestation:
+    enabled: ${ATTESTATION_ENABLED:false}
+
+  appcheck:
+    enforced: ${APPCHECK_ENFORCED:false}
+    project-number: ${FIREBASE_PROJECT_NUMBER:000000000000}
+
   telegram:
     bot-token: ${TELEGRAM_BOT_TOKEN:}
     webhook-secret: ${TELEGRAM_WEBHOOK_SECRET:}

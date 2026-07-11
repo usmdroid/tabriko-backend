@@ -15,10 +15,14 @@ public record AdminUserDetailResponse(
 ) {
     public record DeviceSummary(
             UUID id,
+            String deviceId,
             String platform,
             String appVersion,
             String deviceName,
             String osVersion,
-            Instant updatedAt
+            Instant updatedAt,
+            boolean rooted,
+            Boolean genuine,
+            boolean blocked
     ) {}
 }

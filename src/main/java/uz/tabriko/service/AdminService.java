@@ -184,6 +184,26 @@ public class AdminService {
         userRepo.save(user);
     }
 
+    @Transactional
+    public void blockDevice(String deviceId) {
+        List<UserDevice> devices = userDeviceRepo.findAllByDeviceId(deviceId);
+        if (devices.isEmpty()) {
+            throw ApiException.notFound("Device not found");
+        }
+        devices.forEach(d -> d.setBlocked(true));
+        userDeviceRepo.saveAll(devices);
+    }
+
+    @Transactional
+    public void unblockDevice(String deviceId) {
+        List<UserDevice> devices = userDeviceRepo.findAllByDeviceId(deviceId);
+        if (devices.isEmpty()) {
+            throw ApiException.notFound("Device not found");
+        }
+        devices.forEach(d -> d.setBlocked(false));
+        userDeviceRepo.saveAll(devices);
+    }
+
     @Transactional(readOnly = true)
     public AdminUserDetailResponse getUserDetail(UUID id) {
         User user = userRepo.findById(id)
@@ -192,11 +212,15 @@ public class AdminService {
         List<AdminUserDetailResponse.DeviceSummary> deviceSummaries = devices.stream()
                 .map(d -> new AdminUserDetailResponse.DeviceSummary(
                         d.getId(),
+                        d.getDeviceId(),
                         d.getPlatform().name(),
                         d.getAppVersion(),
                         d.getDeviceName(),
                         d.getOsVersion(),
-                        d.getUpdatedAt()
+                        d.getUpdatedAt(),
+                        d.isRooted(),
+                        d.getGenuine(),
+                        d.isBlocked()
                 ))
                 .collect(Collectors.toList());
         return new AdminUserDetailResponse(
@@ -271,6 +295,7 @@ public class AdminService {
         if (dto.getOrdersOpen() != null) entity.setOrdersOpen(dto.getOrdersOpen());
         if (dto.getMaintenanceMode() != null) entity.setMaintenanceMode(dto.getMaintenanceMode());
         if (dto.getRegistrationOpen() != null) entity.setRegistrationOpen(dto.getRegistrationOpen());
+        if (dto.getBlockRootedDevices() != null) entity.setBlockRootedDevices(dto.getBlockRootedDevices());
         settingsRepo.save(entity);
         return toPlatformSettings(entity);
     }
@@ -421,6 +446,7 @@ public class AdminService {
         r.setOrdersOpen(e.isOrdersOpen());
         r.setMaintenanceMode(e.isMaintenanceMode());
         r.setRegistrationOpen(e.isRegistrationOpen());
+        r.setBlockRootedDevices(e.isBlockRootedDevices());
         return r;
     }
 }

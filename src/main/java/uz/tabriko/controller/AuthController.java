@@ -14,6 +14,7 @@ import uz.tabriko.dto.request.RefreshTokenRequest;
 import uz.tabriko.dto.request.RegisterRequest;
 import uz.tabriko.dto.request.ResetPasswordRequest;
 import uz.tabriko.dto.request.SendOtpRequest;
+import uz.tabriko.infrastructure.ratelimit.LoginRateLimiter;
 import uz.tabriko.infrastructure.ratelimit.OtpRateLimiter;
 import uz.tabriko.service.AuthService;
 
@@ -25,6 +26,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final OtpRateLimiter otpRateLimiter;
+    private final LoginRateLimiter loginRateLimiter;
 
     @PostMapping("/send-otp")
     @Operation(summary = "Send OTP to phone (used for register and reset-password)")
@@ -50,7 +52,8 @@ public class AuthController {
 
     @PostMapping("/login")
     @Operation(summary = "Login with phone and password")
-    public ResponseEntity<BaseResponse<?>> login(@Valid @RequestBody LoginRequest req) {
+    public ResponseEntity<BaseResponse<?>> login(@Valid @RequestBody LoginRequest req, HttpServletRequest request) {
+        loginRateLimiter.checkAndRecord(PhoneUtil.normalize(req.getPhone()), clientIp(request));
         return ResponseEntity.ok(BaseResponse.ok(authService.login(req)));
     }
 

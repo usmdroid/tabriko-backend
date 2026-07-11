@@ -45,6 +45,9 @@ class AdminControllerTest {
     @MockBean uz.tabriko.service.PromotionService promotionService;
     @MockBean uz.tabriko.service.AdminBroadcastService adminBroadcastService;
     @MockBean uz.tabriko.security.JwtUtil jwtUtil;
+    @MockBean uz.tabriko.repository.UserDeviceRepository userDeviceRepository;
+    @MockBean uz.tabriko.repository.PlatformSettingsRepository platformSettingsRepository;
+    @MockBean uz.tabriko.security.AppCheckTokenVerifier appCheckTokenVerifier;
 
     /**
      * Minimal security config for the test slice:
@@ -228,6 +231,31 @@ class AdminControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"body\":\"World\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ===== Device block/unblock RBAC (scenarios 16, 17, 18) =====
+
+    @Test
+    @WithMockUser(roles = "MODERATOR")
+    void moderator_canBlockDevice_returns200() throws Exception {
+        doNothing().when(adminService).blockDevice(any());
+        mvc.perform(post("/api/v1/admin/devices/{deviceId}/block", "dev-x"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(roles = "CLIENT")
+    void client_cannotBlockDevice_returns403() throws Exception {
+        mvc.perform(post("/api/v1/admin/devices/{deviceId}/block", "dev-x"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "SUPERADMIN")
+    void superadmin_canUnblockDevice_returns200() throws Exception {
+        doNothing().when(adminService).unblockDevice(any());
+        mvc.perform(post("/api/v1/admin/devices/{deviceId}/unblock", "dev-y"))
+                .andExpect(status().isOk());
     }
 
     // ===== Unauthenticated =====

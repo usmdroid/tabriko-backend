@@ -17,6 +17,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import uz.tabriko.security.AppCheckFilter;
+import uz.tabriko.security.DeviceIntegrityFilter;
 import uz.tabriko.security.JwtAccessDeniedHandler;
 import uz.tabriko.security.JwtAuthEntryPoint;
 import uz.tabriko.security.JwtAuthFilter;
@@ -30,6 +32,8 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final DeviceIntegrityFilter deviceIntegrityFilter;
+    private final AppCheckFilter appCheckFilter;
     private final JwtAuthEntryPoint authEntryPoint;
     private final JwtAccessDeniedHandler accessDeniedHandler;
 
@@ -71,7 +75,9 @@ public class SecurityConfig {
                 // Authenticated
                 .anyRequest().authenticated()
             )
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(deviceIntegrityFilter, JwtAuthFilter.class)
+            .addFilterAfter(appCheckFilter, DeviceIntegrityFilter.class);
 
         return http.build();
     }

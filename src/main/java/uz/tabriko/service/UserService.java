@@ -4,11 +4,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
+import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.entity.UserDevice;
 import uz.tabriko.domain.enums.Platform;
 import uz.tabriko.dto.request.UpdateProfileRequest;
 import uz.tabriko.dto.response.UserResponse;
+import uz.tabriko.repository.PlatformSettingsRepository;
 import uz.tabriko.repository.UserDeviceRepository;
 import uz.tabriko.repository.UserRepository;
 
@@ -21,6 +23,7 @@ public class UserService {
 
     private final UserRepository userRepo;
     private final UserDeviceRepository userDeviceRepo;
+    private final PlatformSettingsRepository settingsRepo;
     private final UserMapper userMapper;
 
     public UserResponse getMe(UUID userId) {
@@ -40,18 +43,36 @@ public class UserService {
 
     @Transactional
     public void registerFcmToken(UUID userId, String token, Platform platform, String appVersion,
-                                  String deviceName, String osVersion) {
+                                  String deviceName, String osVersion, String deviceId, boolean rooted) {
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> ApiException.notFound("User not found"));
 
-        UserDevice device = userDeviceRepo.findByFcmToken(token).orElse(new UserDevice());
+        UserDevice device;
+        if (deviceId != null && !deviceId.isBlank()) {
+            device = userDeviceRepo.findByUserIdAndDeviceId(userId, deviceId).orElse(new UserDevice());
+        } else {
+            device = userDeviceRepo.findByFcmToken(token).orElse(new UserDevice());
+        }
+
+        if (device.isBlocked()) {
+            throw ApiException.forbidden("Device is blocked.");
+        }
+
         device.setUser(user);
         device.setFcmToken(token);
         device.setPlatform(platform);
         device.setAppVersion(appVersion);
         device.setDeviceName(deviceName);
         device.setOsVersion(osVersion);
+        device.setDeviceId(deviceId);
+        device.setRooted(rooted);
         device.setUpdatedAt(Instant.now());
+
+        PlatformSettingsEntity settings = settingsRepo.findById(1).orElseGet(PlatformSettingsEntity::new);
+        if (settings.isBlockRootedDevices() && (device.isRooted() || Boolean.FALSE.equals(device.getGenuine()))) {
+            throw ApiException.forbidden("Device is blocked.");
+        }
+
         userDeviceRepo.save(device);
 
         user.setFcmToken(token);

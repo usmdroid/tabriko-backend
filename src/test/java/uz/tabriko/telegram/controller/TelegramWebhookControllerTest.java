@@ -35,6 +35,9 @@ class TelegramWebhookControllerTest {
     @Autowired TelegramWebhookController controller;
     @MockBean TelegramBotService botService;
     @MockBean JwtUtil jwtUtil;
+    @MockBean uz.tabriko.repository.UserDeviceRepository userDeviceRepository;
+    @MockBean uz.tabriko.repository.PlatformSettingsRepository platformSettingsRepository;
+    @MockBean uz.tabriko.security.AppCheckTokenVerifier appCheckTokenVerifier;
 
     private static final String SECRET = "test-secret";
     private static final String UPDATE_JSON = "{\"update_id\":1}";

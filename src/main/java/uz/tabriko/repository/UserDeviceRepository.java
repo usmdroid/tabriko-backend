@@ -15,6 +15,9 @@ public interface UserDeviceRepository extends JpaRepository<UserDevice, UUID> {
     Optional<UserDevice> findByFcmToken(String fcmToken);
     List<UserDevice> findByUserId(UUID userId);
     void deleteByFcmToken(String fcmToken);
+    Optional<UserDevice> findByUserIdAndDeviceId(UUID userId, String deviceId);
+    Optional<UserDevice> findByDeviceId(String deviceId);
+    List<UserDevice> findAllByDeviceId(String deviceId);
 
     @Query("SELECT DISTINCT ud.user.id FROM UserDevice ud")
     List<UUID> findDistinctUserIds();

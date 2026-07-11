@@ -38,6 +38,21 @@ public class UserDevice {
     @Column(name = "os_version", length = 60)
     private String osVersion;
 
+    @Column(name = "device_id", length = 100)
+    private String deviceId;
+
+    @Column(name = "rooted", nullable = false)
+    private boolean rooted = false;
+
+    @Column(name = "genuine")
+    private Boolean genuine;
+
+    @Column(name = "blocked", nullable = false)
+    private boolean blocked = false;
+
+    @Column(name = "attest_public_key", length = 2000)
+    private String attestPublicKey;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

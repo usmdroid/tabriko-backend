@@ -36,6 +36,9 @@ class AdminBroadcastControllerTest {
     @MockBean PromotionService promotionService;
     @MockBean AdminBroadcastService adminBroadcastService;
     @MockBean uz.tabriko.security.JwtUtil jwtUtil;
+    @MockBean uz.tabriko.repository.UserDeviceRepository userDeviceRepository;
+    @MockBean uz.tabriko.repository.PlatformSettingsRepository platformSettingsRepository;
+    @MockBean uz.tabriko.security.AppCheckTokenVerifier appCheckTokenVerifier;
 
     private BroadcastNotificationRequest validRequest() {
         BroadcastTarget target = new BroadcastTarget();

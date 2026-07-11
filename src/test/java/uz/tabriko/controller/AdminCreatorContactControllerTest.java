@@ -43,6 +43,9 @@ class AdminCreatorContactControllerTest {
     @MockBean uz.tabriko.service.PromotionService promotionService;
     @MockBean uz.tabriko.service.AdminBroadcastService adminBroadcastService;
     @MockBean uz.tabriko.security.JwtUtil jwtUtil;
+    @MockBean uz.tabriko.repository.UserDeviceRepository userDeviceRepository;
+    @MockBean uz.tabriko.repository.PlatformSettingsRepository platformSettingsRepository;
+    @MockBean uz.tabriko.security.AppCheckTokenVerifier appCheckTokenVerifier;
 
     @TestConfiguration
     @EnableMethodSecurity

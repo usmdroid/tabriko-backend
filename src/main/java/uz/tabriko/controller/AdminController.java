@@ -267,6 +267,22 @@ public class AdminController {
         return ResponseEntity.ok(BaseResponse.ok(adminService.getUserDetail(id)));
     }
 
+    // --- Devices ---
+
+    @PostMapping("/devices/{deviceId}/block")
+    @Operation(summary = "Block a device by device_id (client-generated UUID)")
+    public ResponseEntity<BaseResponse<?>> blockDevice(@PathVariable String deviceId) {
+        adminService.blockDevice(deviceId);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    @PostMapping("/devices/{deviceId}/unblock")
+    @Operation(summary = "Unblock a device by device_id (client-generated UUID)")
+    public ResponseEntity<BaseResponse<?>> unblockDevice(@PathVariable String deviceId) {
+        adminService.unblockDevice(deviceId);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
     @PostMapping("/users/{id}/notify")
     @Operation(summary = "Send a targeted push notification to a specific user")
     public ResponseEntity<Void> notifyUser(
