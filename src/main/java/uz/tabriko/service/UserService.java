@@ -39,7 +39,8 @@ public class UserService {
     }
 
     @Transactional
-    public void registerFcmToken(UUID userId, String token, Platform platform, String appVersion) {
+    public void registerFcmToken(UUID userId, String token, Platform platform, String appVersion,
+                                  String deviceName, String osVersion) {
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> ApiException.notFound("User not found"));
 
@@ -48,6 +49,8 @@ public class UserService {
         device.setFcmToken(token);
         device.setPlatform(platform);
         device.setAppVersion(appVersion);
+        device.setDeviceName(deviceName);
+        device.setOsVersion(osVersion);
         device.setUpdatedAt(Instant.now());
         userDeviceRepo.save(device);
 

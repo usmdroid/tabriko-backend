@@ -47,7 +47,7 @@ class UserServiceTest {
     void registerFcmToken_newToken_createsDeviceRow() {
         when(userDeviceRepo.findByFcmToken("new-token")).thenReturn(Optional.empty());
 
-        userService.registerFcmToken(userId, "new-token", Platform.ANDROID, "1.0.0");
+        userService.registerFcmToken(userId, "new-token", Platform.ANDROID, "1.0.0", null, null);
 
         ArgumentCaptor<UserDevice> deviceCaptor = ArgumentCaptor.forClass(UserDevice.class);
         verify(userDeviceRepo).save(deviceCaptor.capture());
@@ -70,7 +70,7 @@ class UserServiceTest {
 
         when(userDeviceRepo.findByFcmToken("existing-token")).thenReturn(Optional.of(existing));
 
-        userService.registerFcmToken(userId, "existing-token", Platform.ANDROID, "2.0.0");
+        userService.registerFcmToken(userId, "existing-token", Platform.ANDROID, "2.0.0", null, null);
 
         ArgumentCaptor<UserDevice> deviceCaptor = ArgumentCaptor.forClass(UserDevice.class);
         verify(userDeviceRepo).save(deviceCaptor.capture());
@@ -94,7 +94,7 @@ class UserServiceTest {
 
         when(userDeviceRepo.findByFcmToken("shared-token")).thenReturn(Optional.of(existing));
 
-        userService.registerFcmToken(userId, "shared-token", Platform.IOS, "1.0.0");
+        userService.registerFcmToken(userId, "shared-token", Platform.IOS, "1.0.0", null, null);
 
         ArgumentCaptor<UserDevice> deviceCaptor = ArgumentCaptor.forClass(UserDevice.class);
         verify(userDeviceRepo).save(deviceCaptor.capture());
@@ -105,9 +105,44 @@ class UserServiceTest {
     void registerFcmToken_alsoUpdatesUserFcmTokenField() {
         when(userDeviceRepo.findByFcmToken("my-token")).thenReturn(Optional.empty());
 
-        userService.registerFcmToken(userId, "my-token", Platform.ANDROID, "1.0.0");
+        userService.registerFcmToken(userId, "my-token", Platform.ANDROID, "1.0.0", null, null);
 
         assertThat(user.getFcmToken()).isEqualTo("my-token");
         verify(userRepo).save(user);
+    }
+
+    @Test
+    void registerFcmToken_withDeviceNameAndOsVersion_persistsNewFields() {
+        when(userDeviceRepo.findByFcmToken("token-x")).thenReturn(Optional.empty());
+
+        userService.registerFcmToken(userId, "token-x", Platform.IOS, "2.1.0", "iPhone 14", "iOS 16.5");
+
+        ArgumentCaptor<UserDevice> deviceCaptor = ArgumentCaptor.forClass(UserDevice.class);
+        verify(userDeviceRepo).save(deviceCaptor.capture());
+        UserDevice saved = deviceCaptor.getValue();
+        assertThat(saved.getDeviceName()).isEqualTo("iPhone 14");
+        assertThat(saved.getOsVersion()).isEqualTo("iOS 16.5");
+    }
+
+    @Test
+    void registerFcmToken_upsert_updatesDeviceNameAndOsVersion() {
+        UserDevice existing = new UserDevice();
+        existing.setFcmToken("token-y");
+        existing.setUser(user);
+        existing.setPlatform(Platform.ANDROID);
+        existing.setAppVersion("1.0.0");
+        existing.setDeviceName("Old Phone");
+        existing.setOsVersion("Android 12");
+        existing.setCreatedAt(Instant.now().minusSeconds(100));
+
+        when(userDeviceRepo.findByFcmToken("token-y")).thenReturn(Optional.of(existing));
+
+        userService.registerFcmToken(userId, "token-y", Platform.ANDROID, "2.0.0", "New Phone", "Android 14");
+
+        ArgumentCaptor<UserDevice> deviceCaptor = ArgumentCaptor.forClass(UserDevice.class);
+        verify(userDeviceRepo).save(deviceCaptor.capture());
+        UserDevice saved = deviceCaptor.getValue();
+        assertThat(saved.getDeviceName()).isEqualTo("New Phone");
+        assertThat(saved.getOsVersion()).isEqualTo("Android 14");
     }
 }

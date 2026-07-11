@@ -42,7 +42,8 @@ public class UserController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody RegisterFcmTokenRequest req
     ) {
-        userService.registerFcmToken(principal.getUserId(), req.getToken(), req.getPlatform(), req.getAppVersion());
+        userService.registerFcmToken(principal.getUserId(), req.getToken(), req.getPlatform(), req.getAppVersion(),
+                req.getDeviceName(), req.getOsVersion());
         return ResponseEntity.ok(BaseResponse.ok());
     }
 }

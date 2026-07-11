@@ -15,4 +15,7 @@ public class RegisterFcmTokenRequest {
 
     @NotBlank
     private String appVersion;
+
+    private String deviceName;
+    private String osVersion;
 }

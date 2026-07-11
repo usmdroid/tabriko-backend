@@ -17,11 +17,14 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import uz.tabriko.dto.response.AdminStatsResponse;
+import uz.tabriko.dto.response.AdminUserDetailResponse;
 import uz.tabriko.dto.response.AdminUserResponse;
 import uz.tabriko.dto.response.OrderResponse;
 import uz.tabriko.dto.response.PageResponse;
 import uz.tabriko.dto.response.PlatformSettings;
 import uz.tabriko.service.AdminService;
+
+import java.time.Instant;
 
 import java.util.List;
 import java.util.UUID;
@@ -172,6 +175,59 @@ class AdminControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"maintenanceMode\":true}"))
                 .andExpect(status().isOk());
+    }
+
+    // ===== GET /admin/users/{id} — user detail =====
+
+    @Test
+    @WithMockUser(roles = "MODERATOR")
+    void moderator_canGetUserDetail() throws Exception {
+        UUID userId = UUID.randomUUID();
+        AdminUserDetailResponse detail = new AdminUserDetailResponse(
+                userId, "Alice", "+998901111111", "CLIENT", "ACTIVE", Instant.now(), List.of());
+        when(adminService.getUserDetail(userId)).thenReturn(detail);
+
+        mvc.perform(get("/api/v1/admin/users/{id}", userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(userId.toString()))
+                .andExpect(jsonPath("$.data.role").value("CLIENT"))
+                .andExpect(jsonPath("$.data.devices").isArray());
+    }
+
+    @Test
+    @WithMockUser(roles = "SUPERADMIN")
+    void getUserDetail_unknownUser_returns404() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(adminService.getUserDetail(userId))
+                .thenThrow(uz.tabriko.common.exception.ApiException.notFound("User not found"));
+
+        mvc.perform(get("/api/v1/admin/users/{id}", userId))
+                .andExpect(status().isNotFound());
+    }
+
+    // ===== POST /admin/users/{id}/notify =====
+
+    @Test
+    @WithMockUser(roles = "MODERATOR")
+    void moderator_canNotifyUser_returns204() throws Exception {
+        UUID userId = UUID.randomUUID();
+        doNothing().when(adminService).notifyUser(eq(userId), any());
+
+        mvc.perform(post("/api/v1/admin/users/{id}/notify", userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Hello\",\"body\":\"World\"}"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @WithMockUser(roles = "SUPERADMIN")
+    void notifyUser_missingTitle_returns400() throws Exception {
+        UUID userId = UUID.randomUUID();
+
+        mvc.perform(post("/api/v1/admin/users/{id}/notify", userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"body\":\"World\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     // ===== Unauthenticated =====

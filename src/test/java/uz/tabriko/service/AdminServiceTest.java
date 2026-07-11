@@ -18,13 +18,18 @@ import uz.tabriko.domain.enums.OrderStatus;
 import uz.tabriko.domain.enums.ReportStatus;
 import uz.tabriko.domain.enums.Role;
 import uz.tabriko.domain.enums.UserStatus;
+import uz.tabriko.domain.entity.UserDevice;
+import uz.tabriko.domain.enums.Platform;
 import uz.tabriko.dto.request.AddCreatorContactRequest;
 import uz.tabriko.dto.request.AddCreatorRequest;
+import uz.tabriko.dto.request.UserNotifyRequest;
 import uz.tabriko.dto.response.AdminStatsResponse;
+import uz.tabriko.dto.response.AdminUserDetailResponse;
 import uz.tabriko.dto.response.AdminUserResponse;
 import uz.tabriko.dto.response.CreatorContactResponse;
 import uz.tabriko.dto.response.CreatorResponse;
 import uz.tabriko.dto.response.PlatformSettings;
+import uz.tabriko.infrastructure.firebase.PushNotificationService;
 import uz.tabriko.repository.*;
 
 import org.springframework.data.domain.Page;
@@ -45,6 +50,7 @@ import static org.mockito.Mockito.*;
 class AdminServiceTest {
 
     @Mock UserRepository userRepo;
+    @Mock UserDeviceRepository userDeviceRepo;
     @Mock CreatorProfileRepository creatorProfileRepo;
     @Mock CategoryRepository categoryRepo;
     @Mock OrderRepository orderRepo;
@@ -55,6 +61,7 @@ class AdminServiceTest {
     @Mock CreatorContactRepository contactRepo;
     @Mock uz.tabriko.infrastructure.payment.PaymentGateway paymentGateway;
     @Mock NotificationService notificationService;
+    @Mock PushNotificationService pushService;
     @Mock UserMapper mapper;
 
     @InjectMocks AdminService adminService;
@@ -654,5 +661,150 @@ class AdminServiceTest {
         adminService.deleteCreatorContact(creatorId, contactId);
 
         verify(contactRepo).delete(contact);
+    }
+
+    // ===== GET /admin/users/{id} — getUserDetail =====
+
+    @Test
+    void getUserDetail_existingUser_returnsDetailWithDevices() {
+        UUID deviceId = UUID.randomUUID();
+        UserDevice device = new UserDevice();
+        device.setId(deviceId);
+        device.setPlatform(Platform.ANDROID);
+        device.setAppVersion("2.0.0");
+        device.setDeviceName("Pixel 7");
+        device.setOsVersion("Android 14");
+        device.setUpdatedAt(Instant.now());
+
+        when(userRepo.findById(clientId)).thenReturn(Optional.of(clientUser));
+        when(userDeviceRepo.findByUserId(clientId)).thenReturn(List.of(device));
+
+        AdminUserDetailResponse result = adminService.getUserDetail(clientId);
+
+        assertThat(result.id()).isEqualTo(clientId);
+        assertThat(result.name()).isEqualTo("Test User");
+        assertThat(result.phone()).isEqualTo("+998901234567");
+        assertThat(result.role()).isEqualTo("CLIENT");
+        assertThat(result.status()).isEqualTo("ACTIVE");
+        assertThat(result.devices()).hasSize(1);
+        AdminUserDetailResponse.DeviceSummary summary = result.devices().get(0);
+        assertThat(summary.id()).isEqualTo(deviceId);
+        assertThat(summary.platform()).isEqualTo("ANDROID");
+        assertThat(summary.appVersion()).isEqualTo("2.0.0");
+        assertThat(summary.deviceName()).isEqualTo("Pixel 7");
+        assertThat(summary.osVersion()).isEqualTo("Android 14");
+    }
+
+    @Test
+    void getUserDetail_unknownUser_throwsNotFound() {
+        when(userRepo.findById(any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminService.getUserDetail(UUID.randomUUID()))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not found");
+    }
+
+    @Test
+    void getUserDetail_noDevices_returnsEmptyDeviceList() {
+        when(userRepo.findById(clientId)).thenReturn(Optional.of(clientUser));
+        when(userDeviceRepo.findByUserId(clientId)).thenReturn(List.of());
+
+        AdminUserDetailResponse result = adminService.getUserDetail(clientId);
+
+        assertThat(result.devices()).isEmpty();
+    }
+
+    // ===== POST /admin/users/{id}/notify =====
+
+    @Test
+    void notifyUser_allDevices_pushesToAll() {
+        UserDevice d1 = new UserDevice();
+        d1.setId(UUID.randomUUID());
+        d1.setFcmToken("token-1");
+        UserDevice d2 = new UserDevice();
+        d2.setId(UUID.randomUUID());
+        d2.setFcmToken("token-2");
+
+        when(userRepo.findById(clientId)).thenReturn(Optional.of(clientUser));
+        when(userDeviceRepo.findByUserId(clientId)).thenReturn(List.of(d1, d2));
+
+        UserNotifyRequest req = new UserNotifyRequest();
+        req.setTitle("Hello");
+        req.setBody("World");
+
+        adminService.notifyUser(clientId, req);
+
+        verify(notificationService).createInAppNotification(eq(clientId), eq("Hello"), eq("World"),
+                eq(uz.tabriko.domain.enums.NotificationType.SYSTEM));
+        verify(pushService).sendPush(eq("token-1"), eq("Hello"), eq("World"), any());
+        verify(pushService).sendPush(eq("token-2"), eq("Hello"), eq("World"), any());
+    }
+
+    @Test
+    void notifyUser_specificDeviceIds_pushesOnlyToSelected() {
+        UUID selectedId = UUID.randomUUID();
+        UUID otherId = UUID.randomUUID();
+
+        UserDevice selected = new UserDevice();
+        selected.setId(selectedId);
+        selected.setFcmToken("token-selected");
+
+        UserDevice other = new UserDevice();
+        other.setId(otherId);
+        other.setFcmToken("token-other");
+
+        when(userRepo.findById(clientId)).thenReturn(Optional.of(clientUser));
+        when(userDeviceRepo.findByUserId(clientId)).thenReturn(List.of(selected, other));
+
+        UserNotifyRequest req = new UserNotifyRequest();
+        req.setTitle("Hi");
+        req.setBody("There");
+        req.setDeviceIds(List.of(selectedId));
+
+        adminService.notifyUser(clientId, req);
+
+        verify(notificationService).createInAppNotification(eq(clientId), any(), any(), any());
+        verify(pushService).sendPush(eq("token-selected"), any(), any(), any());
+        verify(pushService, never()).sendPush(eq("token-other"), any(), any(), any());
+    }
+
+    @Test
+    void notifyUser_deadToken_cleansUpAndContinues() {
+        UserDevice dead = new UserDevice();
+        dead.setId(UUID.randomUUID());
+        dead.setFcmToken("dead-token");
+        UserDevice alive = new UserDevice();
+        alive.setId(UUID.randomUUID());
+        alive.setFcmToken("alive-token");
+
+        when(userRepo.findById(clientId)).thenReturn(Optional.of(clientUser));
+        when(userDeviceRepo.findByUserId(clientId)).thenReturn(List.of(dead, alive));
+        doThrow(new PushNotificationService.DeadTokenException("dead-token"))
+                .when(pushService).sendPush(eq("dead-token"), any(), any(), any());
+
+        UserNotifyRequest req = new UserNotifyRequest();
+        req.setTitle("Test");
+        req.setBody("Body");
+
+        adminService.notifyUser(clientId, req);
+
+        verify(userDeviceRepo).deleteByFcmToken("dead-token");
+        verify(pushService).sendPush(eq("alive-token"), any(), any(), any());
+    }
+
+    @Test
+    void notifyUser_unknownUser_throwsNotFound() {
+        when(userRepo.findById(any())).thenReturn(Optional.empty());
+
+        UserNotifyRequest req = new UserNotifyRequest();
+        req.setTitle("Test");
+        req.setBody("Body");
+
+        assertThatThrownBy(() -> adminService.notifyUser(UUID.randomUUID(), req))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not found");
+
+        verify(pushService, never()).sendPush(any(), any(), any(), any());
+        verify(notificationService, never()).createInAppNotification(any(), any(), any(), any());
     }
 }

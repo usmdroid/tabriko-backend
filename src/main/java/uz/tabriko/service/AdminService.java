@@ -14,6 +14,7 @@ import uz.tabriko.domain.entity.Order;
 import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.entity.WalletTransaction;
+import uz.tabriko.domain.entity.UserDevice;
 import uz.tabriko.domain.enums.NotificationType;
 import uz.tabriko.domain.enums.OrderStatus;
 import uz.tabriko.domain.enums.ReportStatus;
@@ -24,11 +25,14 @@ import uz.tabriko.domain.enums.UserStatus;
 import uz.tabriko.dto.request.AddCreatorContactRequest;
 import uz.tabriko.dto.request.AddCreatorRequest;
 import uz.tabriko.dto.request.AdminCategoryRequest;
+import uz.tabriko.dto.request.UserNotifyRequest;
 import uz.tabriko.dto.response.*;
+import uz.tabriko.infrastructure.firebase.PushNotificationService;
 import uz.tabriko.infrastructure.payment.PaymentGateway;
 import uz.tabriko.repository.*;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -41,6 +45,7 @@ public class AdminService {
     private static final int MAX_ADMIN_CREATORS_PAGE_SIZE = 200;
 
     private final UserRepository userRepo;
+    private final UserDeviceRepository userDeviceRepo;
     private final CreatorProfileRepository creatorProfileRepo;
     private final CategoryRepository categoryRepo;
     private final OrderRepository orderRepo;
@@ -51,6 +56,7 @@ public class AdminService {
     private final CreatorContactRepository contactRepo;
     private final PaymentGateway paymentGateway;
     private final NotificationService notificationService;
+    private final PushNotificationService pushService;
     private final UserMapper mapper;
 
     @Transactional
@@ -176,6 +182,60 @@ public class AdminService {
         }
         user.setStatus(UserStatus.ACTIVE);
         userRepo.save(user);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminUserDetailResponse getUserDetail(UUID id) {
+        User user = userRepo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("User not found"));
+        List<UserDevice> devices = userDeviceRepo.findByUserId(id);
+        List<AdminUserDetailResponse.DeviceSummary> deviceSummaries = devices.stream()
+                .map(d -> new AdminUserDetailResponse.DeviceSummary(
+                        d.getId(),
+                        d.getPlatform().name(),
+                        d.getAppVersion(),
+                        d.getDeviceName(),
+                        d.getOsVersion(),
+                        d.getUpdatedAt()
+                ))
+                .collect(Collectors.toList());
+        return new AdminUserDetailResponse(
+                user.getId(),
+                user.getName(),
+                user.getPhone(),
+                user.getRole().name(),
+                user.getStatus().name(),
+                user.getCreatedAt(),
+                deviceSummaries
+        );
+    }
+
+    @Transactional
+    public void notifyUser(UUID userId, UserNotifyRequest req) {
+        userRepo.findById(userId)
+                .orElseThrow(() -> ApiException.notFound("User not found"));
+
+        List<UserDevice> allDevices = userDeviceRepo.findByUserId(userId);
+        List<UserDevice> targetDevices;
+        if (req.getDeviceIds() == null || req.getDeviceIds().isEmpty()) {
+            targetDevices = allDevices;
+        } else {
+            targetDevices = allDevices.stream()
+                    .filter(d -> req.getDeviceIds().contains(d.getId()))
+                    .collect(Collectors.toList());
+        }
+
+        notificationService.createInAppNotification(userId, req.getTitle(), req.getBody(), NotificationType.SYSTEM);
+
+        Map<String, String> data = new HashMap<>();
+        data.put("type", NotificationType.SYSTEM.name());
+        for (UserDevice device : targetDevices) {
+            try {
+                pushService.sendPush(device.getFcmToken(), req.getTitle(), req.getBody(), data);
+            } catch (PushNotificationService.DeadTokenException e) {
+                userDeviceRepo.deleteByFcmToken(e.getMessage());
+            }
+        }
     }
 
     // --- Stats ---

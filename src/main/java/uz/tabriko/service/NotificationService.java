@@ -50,6 +50,19 @@ public class NotificationService {
     }
 
     @Transactional
+    public void createInAppNotification(UUID userId, String title, String body, NotificationType type) {
+        User user = userRepo.findById(userId).orElse(null);
+        if (user == null) return;
+
+        Notification n = new Notification();
+        n.setUser(user);
+        n.setTitle(title);
+        n.setBody(body);
+        n.setType(type);
+        notificationRepo.save(n);
+    }
+
+    @Transactional
     public void sendNotification(UUID userId, String title, String body, NotificationType type) {
         sendNotification(userId, title, body, type, null);
     }

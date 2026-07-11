@@ -32,6 +32,12 @@ public class UserDevice {
     @Column(name = "app_version", length = 20)
     private String appVersion;
 
+    @Column(name = "device_name", length = 120)
+    private String deviceName;
+
+    @Column(name = "os_version", length = 60)
+    private String osVersion;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

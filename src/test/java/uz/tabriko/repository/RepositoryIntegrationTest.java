@@ -8,11 +8,13 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.data.domain.PageRequest;
 import uz.tabriko.domain.entity.Order;
 import uz.tabriko.domain.entity.User;
+import uz.tabriko.domain.entity.UserDevice;
 import uz.tabriko.domain.entity.CreatorProfile;
 import uz.tabriko.domain.entity.WalletTransaction;
 import uz.tabriko.domain.enums.OrderOption;
 import uz.tabriko.domain.enums.OrderStatus;
 import uz.tabriko.domain.enums.OrderType;
+import uz.tabriko.domain.enums.Platform;
 import uz.tabriko.domain.enums.Role;
 import uz.tabriko.domain.enums.TransactionStatus;
 import uz.tabriko.domain.enums.TransactionType;
@@ -39,6 +41,9 @@ class RepositoryIntegrationTest extends PostgresTestSupport {
 
     @Autowired
     private UserRepository userRepo;
+
+    @Autowired
+    private UserDeviceRepository userDeviceRepo;
 
     @Autowired
     private CreatorProfileRepository creatorProfileRepo;
@@ -162,5 +167,28 @@ class RepositoryIntegrationTest extends PostgresTestSupport {
 
         assertThat(found).isPresent();
         assertThat(found.get().getPhone()).isEqualTo(user.getPhone());
+    }
+
+    // ===== V33 migration: device_name and os_version columns =====
+
+    @Test
+    void v33Migration_deviceNameAndOsVersionColumnsExist_canPersistAndRead() {
+        User user = persistUser(Role.CLIENT, "1000008");
+
+        UserDevice device = new UserDevice();
+        device.setUser(user);
+        device.setFcmToken("v33-test-token-unique");
+        device.setPlatform(Platform.IOS);
+        device.setAppVersion("3.0.0");
+        device.setDeviceName("iPhone 14 Pro");
+        device.setOsVersion("iOS 16.5");
+        UserDevice saved = em.persistAndFlush(device);
+        em.clear();
+
+        UserDevice loaded = userDeviceRepo.findByFcmToken("v33-test-token-unique").orElseThrow();
+        assertThat(loaded.getDeviceName()).isEqualTo("iPhone 14 Pro");
+        assertThat(loaded.getOsVersion()).isEqualTo("iOS 16.5");
+        assertThat(loaded.getPlatform()).isEqualTo(Platform.IOS);
+        assertThat(loaded.getAppVersion()).isEqualTo("3.0.0");
     }
 }

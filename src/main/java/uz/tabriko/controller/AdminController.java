@@ -16,6 +16,7 @@ import uz.tabriko.dto.request.AdminOccasionRequest;
 import uz.tabriko.dto.request.AdminPromotionRequest;
 import uz.tabriko.dto.request.BroadcastNotificationRequest;
 import uz.tabriko.dto.request.FlagCreatorRequest;
+import uz.tabriko.dto.request.UserNotifyRequest;
 import uz.tabriko.dto.response.PlatformSettings;
 import uz.tabriko.service.AdminBroadcastService;
 import uz.tabriko.service.AdminService;
@@ -258,6 +259,22 @@ public class AdminController {
     public ResponseEntity<BaseResponse<?>> unblockUser(@PathVariable UUID id) {
         adminService.unblockUser(id);
         return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    @GetMapping("/users/{id}")
+    @Operation(summary = "Get user detail including device list")
+    public ResponseEntity<BaseResponse<?>> getUserDetail(@PathVariable UUID id) {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.getUserDetail(id)));
+    }
+
+    @PostMapping("/users/{id}/notify")
+    @Operation(summary = "Send a targeted push notification to a specific user")
+    public ResponseEntity<Void> notifyUser(
+            @PathVariable UUID id,
+            @Valid @RequestBody UserNotifyRequest req
+    ) {
+        adminService.notifyUser(id, req);
+        return ResponseEntity.noContent().build();
     }
 
     // --- Stats ---
