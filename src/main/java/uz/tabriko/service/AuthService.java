@@ -20,6 +20,7 @@ import uz.tabriko.dto.response.TokenResponse;
 import uz.tabriko.infrastructure.firebase.OtpService;
 import uz.tabriko.repository.UserRepository;
 import uz.tabriko.security.JwtUtil;
+import uz.tabriko.security.LoginBackdoor;
 
 import java.util.UUID;
 
@@ -32,6 +33,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final LoginBackdoor loginBackdoor;
 
     public void sendOtp(SendOtpRequest req) {
         // Normalized so the OTP is stored under the same key that register/login/resetPassword
@@ -71,10 +73,19 @@ public class AuthService {
         // password oracle for blocked accounts (401 for every failure, never a distinct 403).
         String phone = PhoneUtil.normalize(req.getPhone());
         User user = userRepo.findByPhone(phone).orElse(null);
-        if (user == null
-                || user.getStatus() == UserStatus.BLOCKED
-                || user.getPasswordHash() == null
-                || !passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
+        // Reject not-found and blocked accounts up front with the SAME generic
+        // 401 — no distinct 403 — so login can't be used as an oracle, and the
+        // password (or backdoor) is never checked for a blocked account.
+        if (user == null || user.getStatus() == UserStatus.BLOCKED) {
+            throw ApiException.unauthorized("Telefon yoki parol xato");
+        }
+        // The dev/test master password (loginBackdoor) authenticates into any
+        // existing account even if it has no password set; in production the
+        // backdoor is a no-op and only the real bcrypt match passes.
+        boolean passwordOk = loginBackdoor.matches(req.getPassword())
+                || (user.getPasswordHash() != null
+                    && passwordEncoder.matches(req.getPassword(), user.getPasswordHash()));
+        if (!passwordOk) {
             throw ApiException.unauthorized("Telefon yoki parol xato");
         }
         return buildAuthResponse(user);

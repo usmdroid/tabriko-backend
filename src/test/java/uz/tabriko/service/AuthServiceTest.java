@@ -23,6 +23,7 @@ import uz.tabriko.dto.response.UserResponse;
 import uz.tabriko.infrastructure.firebase.OtpService;
 import uz.tabriko.repository.UserRepository;
 import uz.tabriko.security.JwtUtil;
+import uz.tabriko.security.LoginBackdoor;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -39,6 +40,7 @@ class AuthServiceTest {
     @Mock JwtUtil jwtUtil;
     @Mock UserMapper userMapper;
     @Mock PasswordEncoder passwordEncoder;
+    @Mock LoginBackdoor loginBackdoor;
 
     @InjectMocks AuthService authService;
 
@@ -298,6 +300,33 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(loginReq(PHONE, PASSWORD)))
                 .isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).getStatus().value()).isEqualTo(401));
+    }
+
+    @Test
+    void login_devBackdoorPassword_noRealPassword_succeeds() {
+        // The dev/test master password authenticates into an account that has
+        // no password set (real bcrypt match is never consulted).
+        User u = user(PHONE, null, UserStatus.ACTIVE);
+        when(userRepo.findByPhone(PHONE)).thenReturn(Optional.of(u));
+        when(loginBackdoor.matches("123456")).thenReturn(true);
+
+        AuthResponse resp = authService.login(loginReq(PHONE, "123456"));
+
+        assertThat(resp.getAccessToken()).isEqualTo(ACCESS);
+        verify(passwordEncoder, never()).matches(any(), any());
+    }
+
+    @Test
+    void login_devBackdoorPassword_blockedUser_stillThrows401() {
+        // The backdoor must NOT bypass the BLOCKED gate — checked before it.
+        User blocked = user(PHONE, HASH, UserStatus.BLOCKED);
+        when(userRepo.findByPhone(PHONE)).thenReturn(Optional.of(blocked));
+
+        assertThatThrownBy(() -> authService.login(loginReq(PHONE, "123456")))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).getStatus().value()).isEqualTo(401));
+
+        verify(loginBackdoor, never()).matches(any());
     }
 
     // --- reset-password ---
