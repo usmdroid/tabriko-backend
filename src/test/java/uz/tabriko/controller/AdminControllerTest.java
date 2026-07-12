@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import uz.tabriko.dto.response.AdminStatsResponse;
 import uz.tabriko.dto.response.AdminUserDetailResponse;
 import uz.tabriko.dto.response.AdminUserResponse;
+import uz.tabriko.dto.response.NotifyResultResponse;
 import uz.tabriko.dto.response.OrderResponse;
 import uz.tabriko.dto.response.PageResponse;
 import uz.tabriko.dto.response.PlatformSettings;
@@ -212,14 +213,17 @@ class AdminControllerTest {
 
     @Test
     @WithMockUser(roles = "MODERATOR")
-    void moderator_canNotifyUser_returns204() throws Exception {
+    void moderator_canNotifyUser_returns200() throws Exception {
         UUID userId = UUID.randomUUID();
-        doNothing().when(adminService).notifyUser(eq(userId), any());
+        when(adminService.notifyUser(eq(userId), any()))
+                .thenReturn(new NotifyResultResponse(1, 1, 0));
 
         mvc.perform(post("/api/v1/admin/users/{id}/notify", userId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"Hello\",\"body\":\"World\"}"))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.targeted").value(1))
+                .andExpect(jsonPath("$.data.delivered").value(1));
     }
 
     @Test

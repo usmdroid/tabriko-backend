@@ -17,6 +17,7 @@ import uz.tabriko.dto.request.AdminPromotionRequest;
 import uz.tabriko.dto.request.BroadcastNotificationRequest;
 import uz.tabriko.dto.request.FlagCreatorRequest;
 import uz.tabriko.dto.request.UserNotifyRequest;
+import uz.tabriko.dto.response.NotifyResultResponse;
 import uz.tabriko.dto.response.PlatformSettings;
 import uz.tabriko.service.AdminBroadcastService;
 import uz.tabriko.service.AdminService;
@@ -285,12 +286,13 @@ public class AdminController {
 
     @PostMapping("/users/{id}/notify")
     @Operation(summary = "Send a targeted push notification to a specific user")
-    public ResponseEntity<Void> notifyUser(
+    public ResponseEntity<BaseResponse<NotifyResultResponse>> notifyUser(
             @PathVariable UUID id,
             @Valid @RequestBody UserNotifyRequest req
     ) {
-        adminService.notifyUser(id, req);
-        return ResponseEntity.noContent().build();
+        // Return a JSON body (not 204) so the client always has a parseable
+        // response and can report how many devices were reached.
+        return ResponseEntity.ok(BaseResponse.ok(adminService.notifyUser(id, req)));
     }
 
     // --- Stats ---

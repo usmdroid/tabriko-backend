@@ -1,6 +1,7 @@
 package uz.tabriko.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AdminService {
 
     private static final int MAX_ADMIN_CREATORS_PAGE_SIZE = 200;
@@ -244,7 +246,7 @@ public class AdminService {
     }
 
     @Transactional
-    public void notifyUser(UUID userId, UserNotifyRequest req) {
+    public NotifyResultResponse notifyUser(UUID userId, UserNotifyRequest req) {
         userRepo.findById(userId)
                 .orElseThrow(() -> ApiException.notFound("User not found"));
 
@@ -258,17 +260,35 @@ public class AdminService {
                     .collect(Collectors.toList());
         }
 
+        // The in-app notification is always recorded — even a user with no live
+        // device still sees it when they next open the app.
         notificationService.createInAppNotification(userId, req.getTitle(), req.getBody(), NotificationType.SYSTEM);
 
         Map<String, String> data = new HashMap<>();
         data.put("type", NotificationType.SYSTEM.name());
+
+        int delivered = 0;
+        int failed = 0;
         for (UserDevice device : targetDevices) {
             try {
                 pushService.sendPush(device.getFcmToken(), req.getTitle(), req.getBody(), data);
+                delivered++;
             } catch (PushNotificationService.DeadTokenException e) {
-                userDeviceRepo.deleteByFcmToken(e.getMessage());
+                // Token is dead or was never registered — prune the device.
+                failed++;
+                if (e.getMessage() != null && !e.getMessage().isBlank()) {
+                    userDeviceRepo.deleteByFcmToken(e.getMessage());
+                } else {
+                    userDeviceRepo.delete(device);
+                }
+            } catch (Exception e) {
+                // Any other push failure (transient FCM/network error, misconfig)
+                // must not fail the whole request — log and keep going.
+                failed++;
+                log.warn("[NOTIFY] Push to device {} failed: {}", device.getId(), e.getMessage());
             }
         }
+        return new NotifyResultResponse(targetDevices.size(), delivered, failed);
     }
 
     // --- Stats ---

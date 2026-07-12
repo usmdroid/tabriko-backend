@@ -732,12 +732,15 @@ class AdminServiceTest {
         req.setTitle("Hello");
         req.setBody("World");
 
-        adminService.notifyUser(clientId, req);
+        var result = adminService.notifyUser(clientId, req);
 
         verify(notificationService).createInAppNotification(eq(clientId), eq("Hello"), eq("World"),
                 eq(uz.tabriko.domain.enums.NotificationType.SYSTEM));
         verify(pushService).sendPush(eq("token-1"), eq("Hello"), eq("World"), any());
         verify(pushService).sendPush(eq("token-2"), eq("Hello"), eq("World"), any());
+        assertThat(result.getTargeted()).isEqualTo(2);
+        assertThat(result.getDelivered()).isEqualTo(2);
+        assertThat(result.getFailed()).isZero();
     }
 
     @Test
@@ -786,10 +789,13 @@ class AdminServiceTest {
         req.setTitle("Test");
         req.setBody("Body");
 
-        adminService.notifyUser(clientId, req);
+        var result = adminService.notifyUser(clientId, req);
 
         verify(userDeviceRepo).deleteByFcmToken("dead-token");
         verify(pushService).sendPush(eq("alive-token"), any(), any(), any());
+        assertThat(result.getTargeted()).isEqualTo(2);
+        assertThat(result.getDelivered()).isEqualTo(1);
+        assertThat(result.getFailed()).isEqualTo(1);
     }
 
     @Test

@@ -41,6 +41,12 @@ public class FirebasePushNotificationService implements PushNotificationService 
 
     @Override
     public void sendPush(String fcmToken, String title, String body, Map<String, String> data) {
+        if (fcmToken == null || fcmToken.isBlank()) {
+            // A device row without a usable token (registration never completed).
+            // Treat as a dead token so the caller can prune it; never let a null
+            // token reach Message.builder(), which would throw and fail the batch.
+            throw new PushNotificationService.DeadTokenException(fcmToken == null ? "" : fcmToken);
+        }
         try {
             Message message = Message.builder()
                     .setToken(fcmToken)
