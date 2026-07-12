@@ -2,6 +2,7 @@ package uz.tabriko.infrastructure.media;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -14,13 +15,11 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import uz.tabriko.security.JwtUtil;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.time.Duration;
 import java.util.UUID;
 
 // S3-compatible media storage; activate with STORAGE_PROVIDER=s3
@@ -44,8 +43,13 @@ public class S3MediaStorageService implements MediaStorageService {
     @Value("${S3_SECRET_KEY}")
     private String secretKey;
 
+    @Value("${app.base-url:http://localhost:8080}")
+    private String appBaseUrl;
+
+    @Autowired
+    private JwtUtil jwtUtil;
+
     private S3Client s3;
-    private S3Presigner presigner;
 
     @PostConstruct
     private void init() {
@@ -57,18 +61,11 @@ public class S3MediaStorageService implements MediaStorageService {
             .region(awsRegion)
             .credentialsProvider(provider);
 
-        S3Presigner.Builder presignerBuilder = S3Presigner.builder()
-            .region(awsRegion)
-            .credentialsProvider(provider);
-
         if (!endpoint.isBlank()) {
-            URI uri = URI.create(endpoint);
-            clientBuilder.endpointOverride(uri);
-            presignerBuilder.endpointOverride(uri);
+            clientBuilder.endpointOverride(URI.create(endpoint));
         }
 
         s3 = clientBuilder.build();
-        presigner = presignerBuilder.build();
     }
 
     @Override
@@ -90,21 +87,17 @@ public class S3MediaStorageService implements MediaStorageService {
 
     @Override
     public String applyWatermark(String mediaUrl) {
-        // Stub watermark for S3; production would process the file
-        log.info("[S3] Watermarking: {}", mediaUrl);
-        return mediaUrl + "?watermarked=true";
+        // Deprecated: watermarking removed; kept for interface compatibility
+        return mediaUrl;
     }
 
     @Override
     public String signedUrl(String mediaUrl, UUID userId, long ttlSeconds) {
-        // mediaUrl is "s3://bucket/key" — extract the key. AWS itself enforces the
-        // signature and TTL on this URL, so no separate userId binding is needed here.
-        String key = mediaUrl.replaceFirst("s3://[^/]+/", "");
-        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-            .signatureDuration(Duration.ofSeconds(ttlSeconds))
-            .getObjectRequest(req -> req.bucket(bucket).key(key))
-            .build();
-        return presigner.presignGetObject(presignRequest).url().toString();
+        // Route through the /media/signed JWT endpoint so userId ownership is enforced
+        // at serve time, identical to LocalMediaStorageService. The endpoint calls read()
+        // which fetches the object directly via S3Client — no S3 presigning needed here.
+        String token = jwtUtil.generateDownloadToken(mediaUrl, userId, ttlSeconds);
+        return appBaseUrl + "/api/v1/media/signed?token=" + token;
     }
 
     @Override

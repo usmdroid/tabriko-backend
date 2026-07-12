@@ -26,6 +26,10 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
 
     Optional<WalletTransaction> findByIdAndUserId(Long id, UUID userId);
 
+    boolean existsByProviderRef(String providerRef);
+
+    Optional<WalletTransaction> findByProviderRef(String providerRef);
+
     // Sum by user, status, and type set — used for balance calculation
     @Query("SELECT COALESCE(SUM(t.amount), 0) FROM WalletTransaction t " +
            "WHERE t.user.id = :userId AND t.status = :status AND t.type IN :types")

@@ -8,6 +8,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uz.tabriko.domain.entity.OtpCode;
+import uz.tabriko.infrastructure.sms.SmsService;
 import uz.tabriko.repository.OtpCodeRepository;
 
 import java.time.Instant;
@@ -21,6 +22,7 @@ import static org.mockito.Mockito.*;
 class SecureOtpServiceTest {
 
     @Mock OtpCodeRepository otpCodeRepo;
+    @Mock SmsService smsService;
 
     @InjectMocks SecureOtpService otpService;
 

@@ -2,10 +2,12 @@ package uz.tabriko.infrastructure.firebase;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.domain.entity.OtpCode;
+import uz.tabriko.infrastructure.sms.SmsService;
 import uz.tabriko.repository.OtpCodeRepository;
 
 import java.security.SecureRandom;
@@ -13,20 +15,11 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Production OTP service. Always active; MockOtpService (@Primary) overrides it in dev/test.
- *
- * Security properties:
- * - Cryptographically random 4-digit OTP (SecureRandom)
- * - TTL: 5 minutes
- * - Max 5 verification attempts before the entry is invalidated
- *
- * State is persisted in the otp_codes table (not in-memory) so it survives restarts
- * and is shared correctly across multiple app instances.
- *
- * SMS delivery: wire a real SMS gateway (e.g. Eskiz.uz, Playmobile) before launch.
- * Until then, sendOtp logs a WARNING — OTPs are not delivered to the user's handset.
+ * Production OTP service. Active when app.integrations.live=true.
+ * Sends OTP via EskizSmsService and persists codes in DB.
  */
 @Service
+@ConditionalOnProperty(name = "app.integrations.live", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j
 public class SecureOtpService implements OtpService {
@@ -36,6 +29,7 @@ public class SecureOtpService implements OtpService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final OtpCodeRepository otpCodeRepo;
+    private final SmsService smsService;
 
     @Override
     @Transactional
@@ -47,8 +41,7 @@ public class SecureOtpService implements OtpService {
         entry.setExpiresAt(Instant.now().plusSeconds(TTL_SECONDS));
         entry.setAttempts(0);
         otpCodeRepo.save(entry);
-        // TODO: replace with real SMS gateway call (app.otp.sms-provider = eskiz | playmobile)
-        log.warn("[OTP] SMS provider not configured — OTP for {} was NOT delivered via SMS", phone);
+        smsService.send(phone, "Tabriko: your verification code is " + otp);
     }
 
     @Override

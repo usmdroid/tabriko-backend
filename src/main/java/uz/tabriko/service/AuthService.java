@@ -22,11 +22,15 @@ import uz.tabriko.repository.UserRepository;
 import uz.tabriko.security.JwtUtil;
 import uz.tabriko.security.LoginBackdoor;
 
+import java.security.SecureRandom;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+
+    private static final String ALPHANUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private static final SecureRandom RNG = new SecureRandom();
 
     private final UserRepository userRepo;
     private final OtpService otpService;
@@ -61,6 +65,13 @@ public class AuthService {
             user.setName(req.getName());
             user.setRole(Role.CLIENT);
             user.setStatus(UserStatus.ACTIVE);
+        }
+        if (user.getAccountNumber() == null) {
+            String acctNum;
+            do {
+                acctNum = generateAccountNumber();
+            } while (userRepo.existsByAccountNumber(acctNum));
+            user.setAccountNumber(acctNum);
         }
         user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
         userRepo.save(user);
@@ -126,6 +137,12 @@ public class AuthService {
         } catch (Exception e) {
             throw ApiException.unauthorized("Invalid refresh token");
         }
+    }
+
+    private String generateAccountNumber() {
+        char[] chars = new char[7];
+        for (int i = 0; i < 7; i++) chars[i] = ALPHANUM.charAt(RNG.nextInt(ALPHANUM.length()));
+        return "TBR-" + new String(chars);
     }
 
     private AuthResponse buildAuthResponse(User user) {

@@ -50,9 +50,8 @@ public class LocalMediaStorageService implements MediaStorageService {
 
     @Override
     public String applyWatermark(String mediaUrl) {
-        // Stub: in production apply actual watermark; here return same URL tagged
-        log.info("[MEDIA] Watermarking: {}", mediaUrl);
-        return mediaUrl + "?watermarked=true";
+        // Deprecated: watermarking removed; kept for interface compatibility
+        return mediaUrl;
     }
 
     @Override

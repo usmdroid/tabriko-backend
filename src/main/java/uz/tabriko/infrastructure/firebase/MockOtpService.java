@@ -1,18 +1,16 @@
 package uz.tabriko.infrastructure.firebase;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Primary;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-// Dev/test stub — logs OTP to console. @Primary so it wins over SecureOtpService in these profiles.
+// Dev/test stub — active when app.integrations.live=false (the default).
 @Service
-@Primary
-@Profile({"dev", "test"})
+@ConditionalOnProperty(name = "app.integrations.live", havingValue = "false", matchIfMissing = true)
 @Slf4j
 public class MockOtpService implements OtpService {
 

@@ -53,6 +53,27 @@ class MediaControllerTest {
     }
 
     @Test
+    void expiredOrForeignTokenIsRejected() {
+        UUID ownerId = UUID.randomUUID();
+        UUID strangerId = UUID.randomUUID();
+
+        // Expired / invalid token → null claims → 401
+        UserPrincipal anyone = new UserPrincipal(ownerId, "+998901234567", "CLIENT");
+        when(jwtUtil.extractDownloadClaims("expired-token")).thenReturn(null);
+        assertThatThrownBy(() -> controller.streamSigned(anyone, "expired-token"))
+            .isInstanceOf(ApiException.class)
+            .satisfies(e -> assertThat(((ApiException) e).getStatus().value()).isEqualTo(401));
+
+        // Valid token but belongs to a different user → 403
+        UserPrincipal stranger = new UserPrincipal(strangerId, "+998900000000", "CLIENT");
+        when(jwtUtil.extractDownloadClaims("foreign-token"))
+            .thenReturn(new JwtUtil.DownloadTokenClaims("http://localhost:8080/files/media/x.mp4", ownerId));
+        assertThatThrownBy(() -> controller.streamSigned(stranger, "foreign-token"))
+            .isInstanceOf(ApiException.class)
+            .satisfies(e -> assertThat(((ApiException) e).getStatus().value()).isEqualTo(403));
+    }
+
+    @Test
     void streamSigned_ownerOfToken_streamsFile() {
         UUID ownerId = UUID.randomUUID();
         UserPrincipal owner = new UserPrincipal(ownerId, "+998901234567", "CLIENT");

@@ -43,6 +43,9 @@ public class User {
     @Column(name = "fcm_token", length = 500)
     private String fcmToken;
 
+    @Column(name = "account_number", nullable = false, unique = true, length = 12, updatable = false)
+    private String accountNumber;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 }

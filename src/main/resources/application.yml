@@ -86,6 +86,9 @@ app:
     enforced: ${APPCHECK_ENFORCED:false}
     project-number: ${FIREBASE_PROJECT_NUMBER:000000000000}
 
+  integrations:
+    live: ${INTEGRATIONS_LIVE:false}
+
   telegram:
     bot-token: ${TELEGRAM_BOT_TOKEN:}
     webhook-secret: ${TELEGRAM_WEBHOOK_SECRET:}

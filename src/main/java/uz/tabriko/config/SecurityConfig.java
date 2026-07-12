@@ -59,6 +59,8 @@ public class SecurityConfig {
                     "/api/v1/catalog/**",
                     "/api/v1/creators/**",
                     "/api/v1/wallet/callback",
+                    "/api/v1/wallet/callback/click",
+                    "/api/v1/wallet/callback/payme",
                     "/api/v1/telegram/webhook",
                     "/swagger-ui/**",
                     "/swagger-ui.html",

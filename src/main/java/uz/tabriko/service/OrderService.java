@@ -14,7 +14,6 @@ import uz.tabriko.dto.request.DeliverOrderRequest;
 import uz.tabriko.dto.request.RejectOrderRequest;
 import uz.tabriko.dto.response.OrderResponse;
 import uz.tabriko.dto.response.PageResponse;
-import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.infrastructure.payment.PaymentGateway;
 import uz.tabriko.repository.*;
 
@@ -37,7 +36,6 @@ public class OrderService {
     private final CreatorServiceOfferingRepository serviceOfferingRepo;
     private final UserRepository userRepo;
     private final PaymentGateway paymentGateway;
-    private final MediaStorageService mediaStorage;
     private final NotificationService notificationService;
     private final UserMapper mapper;
 
@@ -90,7 +88,7 @@ public class OrderService {
                 order.getId()
         );
 
-        return mapper.toOrderResponse(order, null);
+        return mapper.toOrderResponse(order, null, clientId);
     }
 
     @Transactional(readOnly = true)
@@ -105,7 +103,7 @@ public class OrderService {
                 : deliveryRepo.findByOrderIdIn(orderIds).stream()
                         .collect(java.util.stream.Collectors.toMap(d -> d.getOrder().getId(), d -> d));
 
-        return PageResponse.of(orders, o -> mapper.toOrderResponse(o, deliveryByOrderId.get(o.getId())));
+        return PageResponse.of(orders, o -> mapper.toOrderResponse(o, deliveryByOrderId.get(o.getId()), userId));
     }
 
     @Transactional(readOnly = true)
@@ -115,7 +113,7 @@ public class OrderService {
         boolean isOwner = order.getClient().getId().equals(userId) || order.getCreator().getId().equals(userId);
         if (!isOwner) throw ApiException.forbidden("Not your order");
         Delivery delivery = deliveryRepo.findByOrderId(orderId).orElse(null);
-        return mapper.toOrderResponse(order, delivery);
+        return mapper.toOrderResponse(order, delivery, userId);
     }
 
     @Transactional
@@ -135,13 +133,11 @@ public class OrderService {
             throw ApiException.badRequest("Order cannot be delivered in current status");
         }
 
-        String watermarked = mediaStorage.applyWatermark(req.getMediaUrl());
-
         Delivery delivery = deliveryRepo.findByOrderId(orderId).orElse(new Delivery());
         delivery.setOrder(order);
         delivery.setMediaUrlClean(req.getMediaUrl());
-        delivery.setMediaUrlWatermarked(watermarked);
-        delivery.setWatermarked(true);
+        delivery.setMediaUrlWatermarked(req.getMediaUrl());
+        delivery.setWatermarked(false);
         delivery.setDeliveredAt(Instant.now());
         deliveryRepo.save(delivery);
 
@@ -156,7 +152,7 @@ public class OrderService {
                 order.getId()
         );
 
-        return mapper.toOrderResponse(order, delivery);
+        return mapper.toOrderResponse(order, delivery, creatorId);
     }
 
     @Transactional
@@ -196,7 +192,7 @@ public class OrderService {
                 order.getId()
         );
 
-        return mapper.toOrderResponse(order, delivery);
+        return mapper.toOrderResponse(order, delivery, clientId);
     }
 
     @Transactional
@@ -226,7 +222,7 @@ public class OrderService {
                 order.getId()
         );
 
-        return mapper.toOrderResponse(order, deliveryRepo.findByOrderId(orderId).orElse(null));
+        return mapper.toOrderResponse(order, deliveryRepo.findByOrderId(orderId).orElse(null), clientId);
     }
 
     @Transactional

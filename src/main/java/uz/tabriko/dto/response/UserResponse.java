@@ -16,4 +16,5 @@ public class UserResponse {
     private Role role;
     private UserStatus status;
     private Instant createdAt;
+    private String accountNumber;
 }

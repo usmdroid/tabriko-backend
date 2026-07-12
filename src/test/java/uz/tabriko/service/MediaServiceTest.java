@@ -75,15 +75,16 @@ class MediaServiceTest {
 
         when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
         when(mediaStorage.store(any(), eq("media"))).thenReturn("clean://url");
-        when(mediaStorage.applyWatermark("clean://url")).thenReturn("watermarked://url");
         when(deliveryRepo.findByOrderId(orderId)).thenReturn(Optional.empty());
         when(deliveryRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = mediaService.uploadMedia(creatorId, orderId, file);
 
-        assertThat(result.getWatermarkedUrl()).isEqualTo("watermarked://url");
+        assertThat(result.getWatermarkedUrl()).isEqualTo("clean://url");
         assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        // No watermark saved
+        verify(deliveryRepo).save(argThat((Delivery d) -> !d.isWatermarked()));
     }
 
     @Test
@@ -162,19 +163,13 @@ class MediaServiceTest {
     // ===== Download URL — correct URL by order status =====
 
     @Test
-    void getDownloadUrl_deliveredStatus_returnsWatermarked() {
+    void getDownloadUrl_deliveredStatus_forbidden() {
         order.setStatus(OrderStatus.DELIVERED);
-        Delivery delivery = buildDelivery();
-
         when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
-        when(deliveryRepo.findByOrderId(orderId)).thenReturn(Optional.of(delivery));
-        when(mediaStorage.signedUrl(eq("watermarked://url"), eq(clientId), anyLong()))
-            .thenReturn("signed://watermarked");
 
-        SignedUrlResponse resp = mediaService.getDownloadUrl(clientId, orderId);
-
-        assertThat(resp.getUrl()).isEqualTo("signed://watermarked");
-        verify(mediaStorage).signedUrl("watermarked://url", clientId, 3600L);
+        assertThatThrownBy(() -> mediaService.getDownloadUrl(clientId, orderId))
+            .isInstanceOf(ApiException.class)
+            .hasMessageContaining("not yet accepted");
     }
 
     @Test
@@ -200,27 +195,27 @@ class MediaServiceTest {
 
         assertThatThrownBy(() -> mediaService.getDownloadUrl(clientId, orderId))
             .isInstanceOf(ApiException.class)
-            .hasMessageContaining("not delivered");
+            .hasMessageContaining("not yet accepted");
     }
 
     @Test
     void getDownloadUrl_creatorCanAlsoDownloadOwnOrder() {
-        order.setStatus(OrderStatus.DELIVERED);
+        order.setStatus(OrderStatus.ACCEPTED);
         Delivery delivery = buildDelivery();
 
         when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
         when(deliveryRepo.findByOrderId(orderId)).thenReturn(Optional.of(delivery));
-        when(mediaStorage.signedUrl(eq("watermarked://url"), eq(creatorId), anyLong()))
-            .thenReturn("signed://watermarked");
+        when(mediaStorage.signedUrl(eq("clean://url"), eq(creatorId), anyLong()))
+            .thenReturn("signed://clean");
 
         SignedUrlResponse resp = mediaService.getDownloadUrl(creatorId, orderId);
 
-        assertThat(resp.getUrl()).isEqualTo("signed://watermarked");
+        assertThat(resp.getUrl()).isEqualTo("signed://clean");
     }
 
     @Test
     void getDownloadUrl_signedUrlTtlIs3600() {
-        order.setStatus(OrderStatus.DELIVERED);
+        order.setStatus(OrderStatus.ACCEPTED);
         Delivery delivery = buildDelivery();
 
         when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
@@ -230,6 +225,28 @@ class MediaServiceTest {
         SignedUrlResponse resp = mediaService.getDownloadUrl(clientId, orderId);
 
         assertThat(resp.getExpiresInSeconds()).isEqualTo(3600L);
+    }
+
+    // ===== Security invariant tests =====
+
+    @Test
+    void foreignUserCannotGetPreviewOrClean() {
+        order.setStatus(OrderStatus.ACCEPTED);
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> mediaService.getDownloadUrl(strangerId, orderId))
+            .isInstanceOf(ApiException.class)
+            .hasMessageContaining("Not your order");
+    }
+
+    @Test
+    void deliveredOrderReturnsNoDownloadUrl() {
+        order.setStatus(OrderStatus.DELIVERED);
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> mediaService.getDownloadUrl(clientId, orderId))
+            .isInstanceOf(ApiException.class)
+            .hasMessageContaining("not yet accepted");
     }
 
     // helpers

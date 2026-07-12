@@ -32,6 +32,7 @@ import uz.tabriko.infrastructure.payment.PaymentGateway;
 import uz.tabriko.repository.*;
 
 import java.math.BigDecimal;
+import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,8 @@ import java.util.stream.Collectors;
 public class AdminService {
 
     private static final int MAX_ADMIN_CREATORS_PAGE_SIZE = 200;
+    private static final String ALPHANUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private static final SecureRandom RNG = new SecureRandom();
 
     private final UserRepository userRepo;
     private final UserDeviceRepository userDeviceRepo;
@@ -68,6 +71,11 @@ public class AdminService {
             u.setName(req.getName());
             u.setRole(Role.CREATOR);
             u.setStatus(UserStatus.ACTIVE);
+            String acctNum;
+            do {
+                acctNum = generateAccountNumber();
+            } while (userRepo.existsByAccountNumber(acctNum));
+            u.setAccountNumber(acctNum);
             return userRepo.save(u);
         });
         user.setRole(Role.CREATOR);
@@ -137,7 +145,7 @@ public class AdminService {
     public PageResponse<OrderResponse> getAllOrders(int page, int size) {
         return PageResponse.of(
                 orderRepo.findAllByOrderByCreatedAtDesc(PageRequest.of(page, size)),
-                o -> mapper.toOrderResponse(o, null)
+                o -> mapper.toOrderResponse(o, null, null)
         );
     }
 
@@ -230,6 +238,7 @@ public class AdminService {
                 user.getRole().name(),
                 user.getStatus().name(),
                 user.getCreatedAt(),
+                user.getAccountNumber(),
                 deviceSummaries
         );
     }
@@ -430,6 +439,12 @@ public class AdminService {
     }
 
     // --- Helpers ---
+
+    private String generateAccountNumber() {
+        char[] chars = new char[7];
+        for (int i = 0; i < 7; i++) chars[i] = ALPHANUM.charAt(RNG.nextInt(ALPHANUM.length()));
+        return "TBR-" + new String(chars);
+    }
 
     private AdminUserResponse toAdminUserResponse(User u) {
         AdminUserResponse r = new AdminUserResponse();

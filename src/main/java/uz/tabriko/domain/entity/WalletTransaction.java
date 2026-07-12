@@ -39,6 +39,9 @@ public class WalletTransaction {
     @Column(nullable = false, length = 20)
     private TransactionStatus status = TransactionStatus.COMPLETED;
 
+    @Column(name = "provider_ref")
+    private String providerRef;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 }

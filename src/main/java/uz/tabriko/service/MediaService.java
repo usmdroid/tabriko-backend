@@ -51,13 +51,12 @@ public class MediaService {
         }
 
         String cleanUrl = mediaStorage.store(file, "media");
-        String watermarkedUrl = mediaStorage.applyWatermark(cleanUrl);
 
         Delivery delivery = deliveryRepo.findByOrderId(orderId).orElse(new Delivery());
         delivery.setOrder(order);
         delivery.setMediaUrlClean(cleanUrl);
-        delivery.setMediaUrlWatermarked(watermarkedUrl);
-        delivery.setWatermarked(true);
+        delivery.setMediaUrlWatermarked(cleanUrl);
+        delivery.setWatermarked(false);
         delivery.setDeliveredAt(Instant.now());
         deliveryRepo.save(delivery);
 
@@ -73,7 +72,7 @@ public class MediaService {
 
         MediaUploadResponse r = new MediaUploadResponse();
         r.setOrderId(orderId);
-        r.setWatermarkedUrl(watermarkedUrl);
+        r.setWatermarkedUrl(cleanUrl);
         return r;
     }
 
@@ -87,17 +86,14 @@ public class MediaService {
         if (!isClient && !isCreator) {
             throw ApiException.forbidden("Not your order");
         }
-        if (order.getStatus() != OrderStatus.DELIVERED && order.getStatus() != OrderStatus.ACCEPTED) {
-            throw ApiException.forbidden("Order is not delivered yet");
+        if (order.getStatus() != OrderStatus.ACCEPTED) {
+            throw ApiException.forbidden("Order not yet accepted");
         }
 
         Delivery delivery = deliveryRepo.findByOrderId(orderId)
             .orElseThrow(() -> ApiException.notFound("Delivery not found"));
 
-        String mediaUrl = order.getStatus() == OrderStatus.ACCEPTED
-            ? delivery.getMediaUrlClean()
-            : delivery.getMediaUrlWatermarked();
-        String signedUrl = mediaStorage.signedUrl(mediaUrl, userId, SIGNED_URL_TTL_SECONDS);
+        String signedUrl = mediaStorage.signedUrl(delivery.getMediaUrlClean(), userId, SIGNED_URL_TTL_SECONDS);
         return new SignedUrlResponse(signedUrl, SIGNED_URL_TTL_SECONDS);
     }
 

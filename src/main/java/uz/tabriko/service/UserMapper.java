@@ -1,19 +1,27 @@
 package uz.tabriko.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import uz.tabriko.domain.entity.*;
 import uz.tabriko.dto.response.*;
 import uz.tabriko.domain.enums.TransactionStatus;
+import uz.tabriko.infrastructure.media.MediaStorageService;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 @Component
 public class UserMapper {
+
+    private static final long SIGNED_URL_TTL_SECONDS = 3600L;
+
+    @Autowired(required = false)
+    private MediaStorageService mediaStorage;
 
     public UserResponse toResponse(User user) {
         UserResponse r = new UserResponse();
@@ -24,6 +32,7 @@ public class UserMapper {
         r.setRole(user.getRole());
         r.setStatus(user.getStatus());
         r.setCreatedAt(user.getCreatedAt());
+        r.setAccountNumber(user.getAccountNumber());
         return r;
     }
 
@@ -264,7 +273,7 @@ public class UserMapper {
         return r;
     }
 
-    public OrderResponse toOrderResponse(Order o, Delivery delivery) {
+    public OrderResponse toOrderResponse(Order o, Delivery delivery, UUID userId) {
         OrderResponse r = new OrderResponse();
         r.setId(o.getId());
         r.setClientId(o.getClient().getId());
@@ -285,16 +294,22 @@ public class UserMapper {
         r.setCreatedAt(o.getCreatedAt());
         r.setRejectionReason(o.getRejectionReason());
         if (delivery != null) {
-            r.setDelivery(toDeliveryResponse(delivery));
+            r.setDelivery(toDeliveryResponse(delivery, userId));
         }
         return r;
     }
 
-    public DeliveryResponse toDeliveryResponse(Delivery d) {
+    public DeliveryResponse toDeliveryResponse(Delivery d, UUID userId) {
         DeliveryResponse r = new DeliveryResponse();
         r.setId(d.getId());
-        r.setMediaUrl(d.isWatermarked() ? d.getMediaUrlWatermarked() : d.getMediaUrlClean());
-        r.setWatermarked(d.isWatermarked());
+        if (userId == null) {
+            throw new IllegalStateException("userId must not be null when a delivery is present");
+        }
+        String rawUrl = d.getMediaUrlClean();
+        r.setMediaUrl(mediaStorage != null
+            ? mediaStorage.signedUrl(rawUrl, userId, SIGNED_URL_TTL_SECONDS)
+            : rawUrl);
+        r.setWatermarked(false);
         r.setDeliveredAt(d.getDeliveredAt());
         return r;
     }

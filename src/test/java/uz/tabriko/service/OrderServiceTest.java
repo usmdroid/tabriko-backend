@@ -105,7 +105,7 @@ class OrderServiceTest {
         when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.VIDEO)).thenReturn(Optional.of(offering));
         when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(paymentGateway.hold(any(), any(), any())).thenReturn(PaymentResult.ok("mock-tx"));
-        when(mapper.toOrderResponse(any(), any())).thenReturn(new OrderResponse());
+        when(mapper.toOrderResponse(any(), any(), any())).thenReturn(new OrderResponse());
 
         orderService.createOrder(clientId, req);
 
@@ -150,7 +150,7 @@ class OrderServiceTest {
         when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.VIDEO)).thenReturn(Optional.of(offering));
         when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(paymentGateway.hold(any(), any(), any())).thenReturn(PaymentResult.ok("mock-tx"));
-        when(mapper.toOrderResponse(any(), any())).thenReturn(new OrderResponse());
+        when(mapper.toOrderResponse(any(), any(), any())).thenReturn(new OrderResponse());
 
         orderService.createOrder(clientId, req);
 
@@ -242,7 +242,7 @@ class OrderServiceTest {
         when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(deliveryRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(paymentGateway.release(any(), any(), any())).thenReturn(PaymentResult.ok("mock-tx"));
-        when(mapper.toOrderResponse(any(), any())).thenReturn(new OrderResponse());
+        when(mapper.toOrderResponse(any(), any(), any())).thenReturn(new OrderResponse());
 
         orderService.acceptOrder(clientId, orderId);
 
@@ -270,7 +270,7 @@ class OrderServiceTest {
         when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(deliveryRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(paymentGateway.release(any(), any(), any())).thenReturn(PaymentResult.ok("mock-tx"));
-        when(mapper.toOrderResponse(any(), any())).thenReturn(new OrderResponse());
+        when(mapper.toOrderResponse(any(), any(), any())).thenReturn(new OrderResponse());
 
         orderService.acceptOrder(clientId, orderId);
 
@@ -317,7 +317,7 @@ class OrderServiceTest {
         when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(paymentGateway.refund(any(), any(), any())).thenReturn(PaymentResult.ok("mock-tx"));
         when(deliveryRepo.findByOrderId(orderId)).thenReturn(Optional.empty());
-        when(mapper.toOrderResponse(any(), any())).thenReturn(new OrderResponse());
+        when(mapper.toOrderResponse(any(), any(), any())).thenReturn(new OrderResponse());
 
         orderService.rejectOrder(clientId, orderId, req);
 

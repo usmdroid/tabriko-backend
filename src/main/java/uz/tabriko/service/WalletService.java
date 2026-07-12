@@ -28,6 +28,7 @@ import uz.tabriko.repository.WalletTransactionRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -104,7 +105,7 @@ public class WalletService {
         tx.setStatus(TransactionStatus.PENDING);
         walletTxRepo.save(tx);
 
-        PaymentInitResult result = paymentProvider.initTopUp(userId, req.getAmount(), tx.getId());
+        PaymentInitResult result = paymentProvider.initTopUp(userId, req.getAmount(), tx.getId(), req.getProvider());
 
         TopUpInitResponse resp = new TopUpInitResponse();
         resp.setWalletTransactionId(tx.getId());
@@ -119,6 +120,11 @@ public class WalletService {
     public void handleCallback(WalletCallbackRequest req) {
         verifyCallbackSignature(req);
 
+        // Idempotency by provider reference — prevents double-credit on duplicate callbacks
+        if (req.getProviderRef() != null && walletTxRepo.existsByProviderRef(req.getProviderRef())) {
+            return;
+        }
+
         WalletTransaction tx = walletTxRepo.findById(req.getTransactionId())
             .orElseThrow(() -> ApiException.notFound("Transaction not found"));
 
@@ -132,7 +138,60 @@ public class WalletService {
             throw ApiException.badRequest("Amount mismatch");
         }
 
+        tx.setProviderRef(req.getProviderRef());
         tx.setStatus(TransactionStatus.COMPLETED);
+        walletTxRepo.save(tx);
+    }
+
+    // Used by ClickCallbackController and PaymeCallbackController to credit a wallet after
+    // provider-native signature verification. Idempotent: repeated calls on a COMPLETED tx are no-ops.
+    @Transactional
+    public void creditTopUp(Long walletTxId, BigDecimal amount, String providerRef) {
+        if (providerRef != null && walletTxRepo.existsByProviderRef(providerRef)) {
+            return; // already credited — idempotent
+        }
+
+        WalletTransaction tx = walletTxRepo.findById(walletTxId)
+            .orElseThrow(() -> ApiException.notFound("Transaction not found"));
+
+        if (tx.getStatus() == TransactionStatus.COMPLETED) return;
+
+        if (tx.getType() != TransactionType.TOPUP && tx.getType() != TransactionType.DEPOSIT) {
+            throw ApiException.badRequest("Transaction is not a topup");
+        }
+        if (tx.getAmount().compareTo(amount) != 0) {
+            throw ApiException.badRequest("Amount mismatch");
+        }
+
+        tx.setProviderRef(providerRef);
+        tx.setStatus(TransactionStatus.COMPLETED);
+        walletTxRepo.save(tx);
+    }
+
+    // Stores the Payme transaction ID on the wallet tx during CreateTransaction so that
+    // PerformTransaction can later resolve the wallet tx by providerRef.
+    @Transactional
+    public void bindPaymeTransaction(Long walletTxId, String paymeId) {
+        if (walletTxRepo.existsByProviderRef(paymeId)) return; // idempotent
+        WalletTransaction tx = walletTxRepo.findById(walletTxId)
+            .orElseThrow(() -> ApiException.notFound("Transaction not found"));
+        if (tx.getProviderRef() == null) {
+            tx.setProviderRef(paymeId);
+            walletTxRepo.save(tx);
+        }
+    }
+
+    // Cancels a PENDING wallet topup (used by Payme CancelTransaction).
+    // Completed transactions cannot be cancelled.
+    @Transactional
+    public void cancelTopUp(Long walletTxId) {
+        WalletTransaction tx = walletTxRepo.findById(walletTxId)
+            .orElseThrow(() -> ApiException.notFound("Transaction not found"));
+        if (tx.getStatus() == TransactionStatus.COMPLETED) {
+            throw ApiException.badRequest("Cannot cancel a completed transaction");
+        }
+        if (tx.getStatus() == TransactionStatus.CANCELLED) return; // already cancelled
+        tx.setStatus(TransactionStatus.CANCELLED);
         walletTxRepo.save(tx);
     }
 
@@ -143,7 +202,7 @@ public class WalletService {
         if (callbackSecret == null || callbackSecret.isBlank()) {
             throw ApiException.unauthorized("Payment callback is not configured");
         }
-        String payload = req.getTransactionId() + ":" + req.getAmount().toPlainString() + ":" + req.getProviderRef();
+        String payload = req.getTransactionId() + ":" + req.getAmount().toPlainString() + ":" + Objects.toString(req.getProviderRef(), "");
         String expected = HmacUtil.sha256Hex(payload, callbackSecret);
         if (!HmacUtil.constantTimeEquals(expected, req.getSignature())) {
             throw ApiException.unauthorized("Invalid payment callback signature");

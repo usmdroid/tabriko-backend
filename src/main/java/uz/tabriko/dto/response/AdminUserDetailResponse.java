@@ -11,6 +11,7 @@ public record AdminUserDetailResponse(
         String role,
         String status,
         Instant createdAt,
+        String accountNumber,
         List<DeviceSummary> devices
 ) {
     public record DeviceSummary(
