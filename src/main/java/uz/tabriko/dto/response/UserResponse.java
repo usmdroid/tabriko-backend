@@ -5,6 +5,7 @@ import uz.tabriko.domain.enums.Role;
 import uz.tabriko.domain.enums.UserStatus;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Data
@@ -15,6 +16,7 @@ public class UserResponse {
     private String email;
     private Role role;
     private UserStatus status;
+    private LocalDate birthDate;
     private Instant createdAt;
     private String accountNumber;
 }

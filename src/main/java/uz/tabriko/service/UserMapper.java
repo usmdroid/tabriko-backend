@@ -31,6 +31,7 @@ public class UserMapper {
         r.setEmail(user.getEmail());
         r.setRole(user.getRole());
         r.setStatus(user.getStatus());
+        r.setBirthDate(user.getBirthDate());
         r.setCreatedAt(user.getCreatedAt());
         r.setAccountNumber(user.getAccountNumber());
         return r;

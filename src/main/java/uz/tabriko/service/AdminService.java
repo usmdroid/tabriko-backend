@@ -237,6 +237,8 @@ public class AdminService {
                 user.getId(),
                 user.getName(),
                 user.getPhone(),
+                user.getEmail(),
+                user.getBirthDate(),
                 user.getRole().name(),
                 user.getStatus().name(),
                 user.getCreatedAt(),

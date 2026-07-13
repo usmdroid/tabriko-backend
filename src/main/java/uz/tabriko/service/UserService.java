@@ -38,6 +38,8 @@ public class UserService {
                 .orElseThrow(() -> ApiException.notFound("User not found"));
         if (req.getName() != null) user.setName(req.getName());
         if (req.getEmail() != null) user.setEmail(req.getEmail());
+        // null birthDate means "no change"; clients must send the field explicitly to update it
+        if (req.getBirthDate() != null) user.setBirthDate(req.getBirthDate());
         return userMapper.toResponse(userRepo.save(user));
     }
 

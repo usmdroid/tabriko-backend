@@ -25,6 +25,7 @@ import uz.tabriko.repository.UserRepository;
 import uz.tabriko.security.JwtUtil;
 import uz.tabriko.security.LoginBackdoor;
 
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -170,6 +171,54 @@ class AuthServiceTest {
         assertThat(resp.getAccessToken()).isEqualTo(ACCESS);
 
         verify(userRepo).save(argThat(u -> HASH.equals(u.getPasswordHash())));
+    }
+
+    @Test
+    void register_withEmailAndBirthDate_persistsBothOnNewUser() {
+        when(otpService.verifyOtp(PHONE, OTP)).thenReturn(true);
+        when(userRepo.findByPhone(PHONE)).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(PASSWORD)).thenReturn(HASH);
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        LocalDate dob = LocalDate.of(1995, 6, 15);
+        RegisterRequest req = new RegisterRequest();
+        req.setPhone(PHONE);
+        req.setCode(OTP);
+        req.setPassword(PASSWORD);
+        req.setEmail(" test@example.com ");
+        req.setBirthDate(dob);
+
+        authService.register(req);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepo).save(captor.capture());
+        User saved = captor.getValue();
+
+        assertThat(saved.getEmail()).isEqualTo("test@example.com");
+        assertThat(saved.getBirthDate()).isEqualTo(dob);
+    }
+
+    @Test
+    void register_blankEmailAndNullBirthDate_persistsNeitherOnNewUser() {
+        when(otpService.verifyOtp(PHONE, OTP)).thenReturn(true);
+        when(userRepo.findByPhone(PHONE)).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(PASSWORD)).thenReturn(HASH);
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        RegisterRequest req = new RegisterRequest();
+        req.setPhone(PHONE);
+        req.setCode(OTP);
+        req.setPassword(PASSWORD);
+        req.setEmail("   ");
+
+        authService.register(req);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepo).save(captor.capture());
+        User saved = captor.getValue();
+
+        assertThat(saved.getEmail()).isNull();
+        assertThat(saved.getBirthDate()).isNull();
     }
 
     // --- phone normalization ---

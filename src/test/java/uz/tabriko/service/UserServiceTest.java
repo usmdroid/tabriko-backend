@@ -15,7 +15,10 @@ import uz.tabriko.repository.PlatformSettingsRepository;
 import uz.tabriko.repository.UserDeviceRepository;
 import uz.tabriko.repository.UserRepository;
 
+import uz.tabriko.dto.request.UpdateProfileRequest;
+
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -43,8 +46,39 @@ class UserServiceTest {
         user.setId(userId);
         when(userRepo.findById(userId)).thenReturn(Optional.of(user));
         when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(userDeviceRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(settingsRepo.findById(1)).thenReturn(Optional.of(new PlatformSettingsEntity()));
+        lenient().when(userDeviceRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(settingsRepo.findById(1)).thenReturn(Optional.of(new PlatformSettingsEntity()));
+    }
+
+    // --- updateMe ---
+
+    @Test
+    void updateMe_withBirthDate_persistsBirthDate() {
+        LocalDate dob = LocalDate.of(1990, 3, 20);
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setBirthDate(dob);
+
+        userService.updateMe(userId, req);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepo).save(captor.capture());
+        assertThat(captor.getValue().getBirthDate()).isEqualTo(dob);
+    }
+
+    @Test
+    void updateMe_nullBirthDate_doesNotClearExistingBirthDate() {
+        LocalDate existing = LocalDate.of(1990, 3, 20);
+        user.setBirthDate(existing);
+
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setName("New Name");
+        // birthDate is null — should not be cleared
+
+        userService.updateMe(userId, req);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepo).save(captor.capture());
+        assertThat(captor.getValue().getBirthDate()).isEqualTo(existing);
     }
 
     @Test

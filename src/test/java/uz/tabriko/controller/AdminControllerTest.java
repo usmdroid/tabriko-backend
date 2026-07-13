@@ -188,7 +188,7 @@ class AdminControllerTest {
     void moderator_canGetUserDetail() throws Exception {
         UUID userId = UUID.randomUUID();
         AdminUserDetailResponse detail = new AdminUserDetailResponse(
-                userId, "Alice", "+998901111111", "CLIENT", "ACTIVE", Instant.now(), "TBR-TEST001", List.of());
+                userId, "Alice", "+998901111111", null, null, "CLIENT", "ACTIVE", Instant.now(), "TBR-TEST001", List.of());
         when(adminService.getUserDetail(userId)).thenReturn(detail);
 
         mvc.perform(get("/api/v1/admin/users/{id}", userId))

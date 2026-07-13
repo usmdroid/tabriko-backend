@@ -7,6 +7,7 @@ import uz.tabriko.domain.enums.Role;
 import uz.tabriko.domain.enums.UserStatus;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -45,6 +46,9 @@ public class User {
 
     @Column(name = "account_number", nullable = false, unique = true, length = 12, updatable = false)
     private String accountNumber;
+
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

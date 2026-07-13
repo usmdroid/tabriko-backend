@@ -62,7 +62,9 @@ public class AuthService {
         if (user == null) {
             user = new User();
             user.setPhone(phone);
-            user.setName(req.getName());
+            if (req.getName() != null && !req.getName().isBlank()) user.setName(req.getName().trim());
+            if (req.getEmail() != null && !req.getEmail().isBlank()) user.setEmail(req.getEmail().trim());
+            if (req.getBirthDate() != null) user.setBirthDate(req.getBirthDate());
             user.setRole(Role.CLIENT);
             user.setStatus(UserStatus.ACTIVE);
         }
