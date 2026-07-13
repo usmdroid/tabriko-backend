@@ -11,10 +11,12 @@ import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.entity.UserDevice;
 import uz.tabriko.domain.enums.Platform;
+import uz.tabriko.infrastructure.firebase.OtpService;
 import uz.tabriko.repository.PlatformSettingsRepository;
 import uz.tabriko.repository.UserDeviceRepository;
 import uz.tabriko.repository.UserRepository;
 
+import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.dto.request.UpdateProfileRequest;
 
 import java.time.Instant;
@@ -23,7 +25,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,6 +37,7 @@ class UserServiceTest {
     @Mock UserDeviceRepository userDeviceRepo;
     @Mock PlatformSettingsRepository settingsRepo;
     @Mock UserMapper userMapper;
+    @Mock OtpService otpService;
 
     @InjectMocks UserService userService;
 
@@ -45,7 +50,9 @@ class UserServiceTest {
         user = new User();
         user.setId(userId);
         when(userRepo.findById(userId)).thenReturn(Optional.of(user));
-        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // lenient: not every test (e.g. requestPhoneChange, and the invalid-OTP
+        // confirm path) reaches a save() call.
+        lenient().when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(userDeviceRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         lenient().when(settingsRepo.findById(1)).thenReturn(Optional.of(new PlatformSettingsEntity()));
     }
@@ -182,5 +189,65 @@ class UserServiceTest {
         UserDevice saved = deviceCaptor.getValue();
         assertThat(saved.getDeviceName()).isEqualTo("New Phone");
         assertThat(saved.getOsVersion()).isEqualTo("Android 14");
+    }
+
+    // --- requestPhoneChange / confirmPhoneChange ---
+
+    @Test
+    void requestPhoneChange_newUnusedNumber_sendsOtp() {
+        user.setPhone("+998901111111");
+        when(userRepo.findByPhone("+998902222222")).thenReturn(Optional.empty());
+
+        userService.requestPhoneChange(userId, "+998902222222");
+
+        verify(otpService).sendOtp("+998902222222");
+    }
+
+    @Test
+    void requestPhoneChange_sameAsCurrentNumber_throwsBadRequest() {
+        user.setPhone("+998901111111");
+
+        assertThatThrownBy(() -> userService.requestPhoneChange(userId, "+998901111111"))
+                .isInstanceOf(ApiException.class);
+
+        verify(otpService, never()).sendOtp(any());
+    }
+
+    @Test
+    void requestPhoneChange_numberOwnedByAnotherUser_throwsConflict() {
+        user.setPhone("+998901111111");
+        User another = new User();
+        another.setId(UUID.randomUUID());
+        when(userRepo.findByPhone("+998902222222")).thenReturn(Optional.of(another));
+
+        assertThatThrownBy(() -> userService.requestPhoneChange(userId, "+998902222222"))
+                .isInstanceOf(ApiException.class);
+
+        verify(otpService, never()).sendOtp(any());
+    }
+
+    @Test
+    void confirmPhoneChange_validOtp_updatesPhone() {
+        user.setPhone("+998901111111");
+        when(otpService.verifyOtp("+998902222222", "1234")).thenReturn(true);
+        when(userRepo.findByPhone("+998902222222")).thenReturn(Optional.empty());
+        when(userMapper.toResponse(any())).thenReturn(new uz.tabriko.dto.response.UserResponse());
+
+        userService.confirmPhoneChange(userId, "+998902222222", "1234");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepo).save(captor.capture());
+        assertThat(captor.getValue().getPhone()).isEqualTo("+998902222222");
+    }
+
+    @Test
+    void confirmPhoneChange_invalidOtp_throwsAndDoesNotSave() {
+        user.setPhone("+998901111111");
+        when(otpService.verifyOtp(eq("+998902222222"), any())).thenReturn(false);
+
+        assertThatThrownBy(() -> userService.confirmPhoneChange(userId, "+998902222222", "0000"))
+                .isInstanceOf(ApiException.class);
+
+        verify(userRepo, never()).save(any());
     }
 }

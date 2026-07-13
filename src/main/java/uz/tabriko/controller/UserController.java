@@ -8,8 +8,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import uz.tabriko.common.response.BaseResponse;
+import uz.tabriko.dto.request.ConfirmPhoneChangeRequest;
 import uz.tabriko.dto.request.RegisterFcmTokenRequest;
+import uz.tabriko.dto.request.RequestPhoneChangeRequest;
 import uz.tabriko.dto.request.UpdateProfileRequest;
+import uz.tabriko.dto.response.UserResponse;
 import uz.tabriko.security.UserPrincipal;
 import uz.tabriko.service.UserService;
 
@@ -34,6 +37,26 @@ public class UserController {
             @Valid @RequestBody UpdateProfileRequest req
     ) {
         return ResponseEntity.ok(BaseResponse.ok(userService.updateMe(principal.getUserId(), req)));
+    }
+
+    @PostMapping("/me/phone/otp")
+    @Operation(summary = "Send an OTP to a new phone number to start changing it")
+    public ResponseEntity<BaseResponse<Void>> requestPhoneChange(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody RequestPhoneChangeRequest req
+    ) {
+        userService.requestPhoneChange(principal.getUserId(), req.getNewPhone());
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    @PostMapping("/me/phone/confirm")
+    @Operation(summary = "Verify the OTP and apply the new phone number")
+    public ResponseEntity<BaseResponse<UserResponse>> confirmPhoneChange(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody ConfirmPhoneChangeRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(
+                userService.confirmPhoneChange(principal.getUserId(), req.getNewPhone(), req.getCode())));
     }
 
     @PostMapping("/devices/token")
