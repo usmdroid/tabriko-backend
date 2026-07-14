@@ -3,6 +3,7 @@ package uz.tabriko.domain.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.domain.enums.RequisiteSource;
 
 import java.time.Instant;
@@ -33,6 +34,10 @@ public class CreatorRequisite {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private RequisiteSource source;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "service_type", nullable = false, length = 16)
+    private OrderType serviceType;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

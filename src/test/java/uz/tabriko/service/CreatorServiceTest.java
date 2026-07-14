@@ -349,44 +349,89 @@ class CreatorServiceTest {
         assertThat(r.getIdDocumentNumberMasked()).isNull();
     }
 
-    // ===== getMyServices — lazy default creation for missing types =====
+    // ===== getMyServices — returns only explicitly created offerings =====
 
     @Test
-    void getMyServices_createsDefaultRowsForMissingTypes() {
-        creatorProfile.setPriceFrom(new BigDecimal("50.00"));
-        creatorProfile.setDeliveryDays(2);
-        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(creatorProfile));
-        when(serviceOfferingRepo.findByCreator_Id(creatorId)).thenReturn(List.of());
-        when(serviceOfferingRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(mapper.toCreatorServiceResponse(any())).thenReturn(new CreatorServiceResponse());
-
-        List<CreatorServiceResponse> result = creatorService.getMyServices(creatorId);
-
-        assertThat(result).hasSize(OrderType.values().length);
-        ArgumentCaptor<CreatorServiceOffering> savedCap = ArgumentCaptor.forClass(CreatorServiceOffering.class);
-        verify(serviceOfferingRepo, times(OrderType.values().length)).save(savedCap.capture());
-        assertThat(savedCap.getAllValues())
-            .allSatisfy(svc -> assertThat(svc.getPrice()).isEqualByComparingTo("50.00"))
-            .allSatisfy(svc -> assertThat(svc.isAccepting()).isFalse());
-    }
-
-    @Test
-    void getMyServices_doesNotOverwriteExistingRows() {
+    void getMyServices_returnsOnlyExistingOfferings() {
         CreatorServiceOffering existing = new CreatorServiceOffering();
         existing.setCreator(creatorUser);
         existing.setType(OrderType.VIDEO);
         existing.setPrice(new BigDecimal("200.00"));
         when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(creatorProfile));
         when(serviceOfferingRepo.findByCreator_Id(creatorId)).thenReturn(List.of(existing));
+        when(mapper.toCreatorServiceResponse(any())).thenReturn(new CreatorServiceResponse());
+
+        List<CreatorServiceResponse> result = creatorService.getMyServices(creatorId);
+
+        assertThat(result).hasSize(1);
+        verify(serviceOfferingRepo, never()).save(any());
+    }
+
+    @Test
+    void getMyServices_returnsEmptyListWhenNoOfferings() {
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(creatorProfile));
+        when(serviceOfferingRepo.findByCreator_Id(creatorId)).thenReturn(List.of());
+
+        List<CreatorServiceResponse> result = creatorService.getMyServices(creatorId);
+
+        assertThat(result).isEmpty();
+        verify(serviceOfferingRepo, never()).save(any());
+    }
+
+    // ===== createService =====
+
+    @Test
+    void createService_createsOfferingWithDefaults() {
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(creatorProfile));
+        when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.VIDEO)).thenReturn(Optional.empty());
         when(serviceOfferingRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(mapper.toCreatorServiceResponse(any())).thenReturn(new CreatorServiceResponse());
 
-        creatorService.getMyServices(creatorId);
+        creatorService.createService(creatorId, OrderType.VIDEO);
 
-        // Only the missing AUDIO row should be created/saved — VIDEO already existed.
-        ArgumentCaptor<CreatorServiceOffering> savedCap = ArgumentCaptor.forClass(CreatorServiceOffering.class);
-        verify(serviceOfferingRepo, times(OrderType.values().length - 1)).save(savedCap.capture());
-        assertThat(savedCap.getAllValues()).noneMatch(svc -> svc.getType() == OrderType.VIDEO);
+        ArgumentCaptor<CreatorServiceOffering> cap = ArgumentCaptor.forClass(CreatorServiceOffering.class);
+        verify(serviceOfferingRepo).save(cap.capture());
+        CreatorServiceOffering saved = cap.getValue();
+        assertThat(saved.getType()).isEqualTo(OrderType.VIDEO);
+        assertThat(saved.getPrice()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(saved.getDeliveryDays()).isEqualTo(3);
+        assertThat(saved.isAccepting()).isFalse();
+    }
+
+    @Test
+    void createService_duplicateType_throws409() {
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(creatorProfile));
+        CreatorServiceOffering existing = new CreatorServiceOffering();
+        existing.setType(OrderType.AUDIO);
+        when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.AUDIO))
+                .thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> creatorService.createService(creatorId, OrderType.AUDIO))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("already exists");
+    }
+
+    // ===== deleteService =====
+
+    @Test
+    void deleteService_existingType_deletesSuccessfully() {
+        CreatorServiceOffering svc = new CreatorServiceOffering();
+        svc.setType(OrderType.VIDEO);
+        when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.VIDEO))
+                .thenReturn(Optional.of(svc));
+
+        creatorService.deleteService(creatorId, OrderType.VIDEO);
+
+        verify(serviceOfferingRepo).delete(svc);
+    }
+
+    @Test
+    void deleteService_nonExistentType_throwsNotFound() {
+        when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.AUDIO))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> creatorService.deleteService(creatorId, OrderType.AUDIO))
+                .isInstanceOf(ApiException.class);
     }
 
     // ===== updateService — validation & persistence =====

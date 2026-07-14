@@ -10,13 +10,19 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import uz.tabriko.domain.entity.Category;
 import uz.tabriko.domain.entity.CreatorProfile;
+import uz.tabriko.domain.entity.Order;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.enums.CreatorTier;
+import uz.tabriko.domain.enums.OrderOption;
+import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.domain.enums.Role;
 import uz.tabriko.domain.enums.UserStatus;
 import uz.tabriko.support.PostgresTestSupport;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -164,6 +170,90 @@ class CreatorProfileRepositoryIntegrationTest extends PostgresTestSupport {
         assertThat(results).hasSize(2);
         assertThat(results.get(0).getUser().getName()).isEqualTo("Many Ratings");
         assertThat(results.get(1).getUser().getName()).isEqualTo("Medium Ratings");
+    }
+
+    @Test
+    void findTrending_ranksByRecentOrderCountDescThenAvgRatingDesc() {
+        category = persistCategory("Trending");
+        CreatorProfile noOrders = persistCreator("+998900001001", "No Orders", true, true, false, 0, UserStatus.ACTIVE);
+        noOrders.setAvgRating(new BigDecimal("4.90"));
+        CreatorProfile moreOrders = persistCreator("+998900001002", "More Orders", true, true, false, 0, UserStatus.ACTIVE);
+        moreOrders.setAvgRating(new BigDecimal("3.00"));
+        em.flush();
+
+        // Place 2 recent orders for "More Orders" creator
+        User client = new User();
+        client.setPhone("+998900001099");
+        client.setName("Client");
+        client.setRole(Role.CLIENT);
+        client.setStatus(UserStatus.ACTIVE);
+        em.persist(client);
+
+        for (int i = 0; i < 2; i++) {
+            Order o = new Order();
+            o.setClient(client);
+            o.setCreator(moreOrders.getUser());
+            o.setType(OrderType.VIDEO);
+            o.setOption(OrderOption.SHER);
+            o.setPrice(new BigDecimal("100.00"));
+            o.setDeadline(Instant.now().plus(3, ChronoUnit.DAYS));
+            em.persist(o);
+        }
+        em.flush();
+        em.clear();
+
+        Instant cutoff = Instant.now().minus(14, ChronoUnit.DAYS);
+        Page<CreatorProfile> page = creatorProfileRepo.findTrending(cutoff, PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).hasSize(2);
+        assertThat(page.getContent().get(0).getUser().getName()).isEqualTo("More Orders");
+        assertThat(page.getContent().get(1).getUser().getName()).isEqualTo("No Orders");
+    }
+
+    @Test
+    void findTrending_excludesUnverifiedAndIncomplete() {
+        category = persistCategory("TrendingFilter");
+        persistCreator("+998900001010", "Verified", true, true, false, 0, UserStatus.ACTIVE);
+        persistCreator("+998900001011", "Unverified", false, true, false, 0, UserStatus.ACTIVE);
+        persistCreator("+998900001012", "Incomplete", true, false, false, 0, UserStatus.ACTIVE);
+        em.flush();
+        em.clear();
+
+        Instant cutoff = Instant.now().minus(14, ChronoUnit.DAYS);
+        Page<CreatorProfile> page = creatorProfileRepo.findTrending(cutoff, PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).getUser().getName()).isEqualTo("Verified");
+    }
+
+    @Test
+    void findSimilar_excludesSelf_andUnverified_andOrdersByCategoryFirst() {
+        category = persistCategory("SimilarCat");
+        Category otherCategory = persistCategory("OtherCat");
+
+        CreatorProfile reference = persistCreator("+998900002001", "Reference", true, true, false, 0, UserStatus.ACTIVE);
+        reference.setTier(CreatorTier.RISING);
+
+        CreatorProfile sameCat = persistCreator("+998900002002", "Same Category", true, true, false, 0, UserStatus.ACTIVE);
+        sameCat.setTier(CreatorTier.STANDARD);
+        sameCat.setAvgRating(new BigDecimal("4.00"));
+
+        CreatorProfile sameTier = persistCreator("+998900002003", "Same Tier", true, true, false, 0, UserStatus.ACTIVE);
+        sameTier.setCategory(otherCategory);
+        sameTier.setTier(CreatorTier.RISING);
+        sameTier.setAvgRating(new BigDecimal("4.50"));
+
+        CreatorProfile unverified = persistCreator("+998900002004", "Unverified", false, true, false, 0, UserStatus.ACTIVE);
+        unverified.setTier(CreatorTier.RISING);
+        em.flush();
+        em.clear();
+
+        List<CreatorProfile> results = creatorProfileRepo.findSimilar(
+                reference.getUserId(), category, CreatorTier.RISING, PageRequest.of(0, 10));
+
+        List<String> names = results.stream().map(cp -> cp.getUser().getName()).toList();
+        assertThat(names).doesNotContain("Reference", "Unverified");
+        assertThat(names).containsExactly("Same Category", "Same Tier");
     }
 
     @Test

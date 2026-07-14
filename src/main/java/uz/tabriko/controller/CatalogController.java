@@ -47,6 +47,21 @@ public class CatalogController {
         return ResponseEntity.ok(BaseResponse.ok(catalogService.getTopCreators()));
     }
 
+    @GetMapping("/creators/trending")
+    @Operation(summary = "Trending creators by recent order volume")
+    public ResponseEntity<BaseResponse<?>> getTrendingCreators(
+            @RequestParam(defaultValue = "10") int limit) {
+        return ResponseEntity.ok(BaseResponse.ok(catalogService.getTrendingCreators(limit)));
+    }
+
+    @GetMapping("/creators/{id}/similar")
+    @Operation(summary = "Similar creators by category and tier")
+    public ResponseEntity<BaseResponse<?>> getSimilarCreators(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "10") int limit) {
+        return ResponseEntity.ok(BaseResponse.ok(catalogService.getSimilarCreators(id, limit)));
+    }
+
     @GetMapping("/creators/for-you")
     @Operation(summary = "Personalized creator suggestions")
     public ResponseEntity<BaseResponse<?>> getForYou(

@@ -33,9 +33,7 @@ import uz.tabriko.repository.OrderRepository;
 import uz.tabriko.repository.PortfolioItemRepository;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -277,24 +275,38 @@ public class CreatorService {
 
     // --- Per-service pricing + discounts (creator_service CRUD) ---
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<CreatorServiceResponse> getMyServices(UUID creatorId) {
+        creatorProfileRepo.findByUserId(creatorId)
+            .orElseThrow(() -> ApiException.notFound("Creator profile not found"));
+        return serviceOfferingRepo.findByCreator_Id(creatorId).stream()
+            .map(mapper::toCreatorServiceResponse)
+            .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public CreatorServiceResponse createService(UUID creatorId, OrderType type) {
         CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
             .orElseThrow(() -> ApiException.notFound("Creator profile not found"));
-
-        Map<OrderType, CreatorServiceOffering> byType = serviceOfferingRepo.findByCreator_Id(creatorId).stream()
-            .collect(Collectors.toMap(CreatorServiceOffering::getType, s -> s));
-
-        List<CreatorServiceOffering> result = new ArrayList<>();
-        for (OrderType type : OrderType.values()) {
-            CreatorServiceOffering svc = byType.get(type);
-            if (svc == null) {
-                svc = defaultServiceOffering(cp, type);
-                serviceOfferingRepo.save(svc);
-            }
-            result.add(svc);
+        if (serviceOfferingRepo.findByCreator_IdAndType(creatorId, type).isPresent()) {
+            throw ApiException.conflict("Service offering for type " + type + " already exists");
         }
-        return result.stream().map(mapper::toCreatorServiceResponse).collect(Collectors.toList());
+        CreatorServiceOffering svc = new CreatorServiceOffering();
+        svc.setCreator(cp.getUser());
+        svc.setType(type);
+        svc.setPrice(BigDecimal.ZERO);
+        svc.setDeliveryDays(3);
+        svc.setAccepting(false);
+        svc.setDiscountType(DiscountType.NONE);
+        serviceOfferingRepo.save(svc);
+        return mapper.toCreatorServiceResponse(svc);
+    }
+
+    @Transactional
+    public void deleteService(UUID creatorId, OrderType type) {
+        CreatorServiceOffering svc = serviceOfferingRepo.findByCreator_IdAndType(creatorId, type)
+            .orElseThrow(() -> ApiException.notFound("Service offering not found"));
+        serviceOfferingRepo.delete(svc);
     }
 
     @Transactional
@@ -345,16 +357,4 @@ public class CreatorService {
         return mapper.toCreatorServiceResponse(svc);
     }
 
-    private CreatorServiceOffering defaultServiceOffering(CreatorProfile cp, OrderType type) {
-        CreatorServiceOffering svc = new CreatorServiceOffering();
-        svc.setCreator(cp.getUser());
-        svc.setType(type);
-        BigDecimal defaultPrice = cp.getPriceFrom() != null && cp.getPriceFrom().signum() > 0
-            ? cp.getPriceFrom() : BigDecimal.ONE;
-        svc.setPrice(defaultPrice);
-        svc.setDeliveryDays(cp.getDeliveryDays() > 0 ? cp.getDeliveryDays() : 3);
-        svc.setAccepting(false);
-        svc.setDiscountType(DiscountType.NONE);
-        return svc;
-    }
 }

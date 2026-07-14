@@ -14,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.dto.request.AddCreatorRequisiteRequest;
+import uz.tabriko.dto.request.CreateCreatorServiceRequest;
 import uz.tabriko.dto.request.UpdateCreatorKycRequest;
 import uz.tabriko.dto.request.UpdateCreatorProfileRequest;
 import uz.tabriko.dto.request.UpdateCreatorServiceRequest;
@@ -173,11 +174,31 @@ public class CreatorController {
     // --- Per-service pricing + discounts ---
 
     @GetMapping("/services")
-    @Operation(summary = "Get own per-service pricing and discount configuration (VIDEO/AUDIO)")
+    @Operation(summary = "Get own per-service pricing and discount configuration (only explicitly created offerings)")
     public ResponseEntity<BaseResponse<List<CreatorServiceResponse>>> getMyServices(
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         return ResponseEntity.ok(BaseResponse.ok(creatorService.getMyServices(principal.getUserId())));
+    }
+
+    @PostMapping("/services")
+    @Operation(summary = "Create a service offering for a given type (VIDEO or AUDIO); defaults price=0, deliveryDays=3, accepting=false")
+    public ResponseEntity<BaseResponse<CreatorServiceResponse>> createService(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody CreateCreatorServiceRequest req
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(BaseResponse.created(creatorService.createService(principal.getUserId(), req.getType())));
+    }
+
+    @DeleteMapping("/services/{type}")
+    @Operation(summary = "Delete own service offering for the given type")
+    public ResponseEntity<BaseResponse<Void>> deleteService(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable OrderType type
+    ) {
+        creatorService.deleteService(principal.getUserId(), type);
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).body(BaseResponse.ok());
     }
 
     @PatchMapping("/services/{type}")
@@ -194,11 +215,13 @@ public class CreatorController {
     // --- Requisites ---
 
     @GetMapping("/requisites")
-    @Operation(summary = "Get own requisite list")
+    @Operation(summary = "Get own requisite list for a service type (VIDEO or AUDIO)")
     public ResponseEntity<BaseResponse<List<CreatorRequisiteResponse>>> getRequisites(
-            @AuthenticationPrincipal UserPrincipal principal
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam OrderType type
     ) {
-        return ResponseEntity.ok(BaseResponse.ok(requisiteService.getCreatorRequisites(principal.getUserId())));
+        return ResponseEntity.ok(BaseResponse.ok(
+                requisiteService.getCreatorRequisites(principal.getUserId(), type)));
     }
 
     @PostMapping("/requisites")

@@ -21,6 +21,8 @@ import uz.tabriko.repository.CreatorRequisiteRepository;
 import uz.tabriko.repository.CreatorServiceOfferingRepository;
 import uz.tabriko.repository.PortfolioItemRepository;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -70,6 +72,32 @@ public class CatalogService {
     @Transactional(readOnly = true)
     public List<CreatorResponse> getForYouCreators(int limit) {
         List<CreatorProfile> creators = creatorProfileRepo.findForYou(PageRequest.of(0, limit));
+        Map<UUID, List<PortfolioItem>> portfolioByCreator = groupPortfolioByCreator(creators);
+        Map<UUID, List<CreatorServiceOffering>> servicesByCreator = groupServicesByCreator(creators);
+        return creators.stream()
+                .map(cp -> mapper.toCreatorResponse(cp, portfolioByCreator.getOrDefault(cp.getUserId(), List.of()),
+                        servicesByCreator.getOrDefault(cp.getUserId(), List.of())))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<CreatorResponse> getTrendingCreators(int limit) {
+        Instant cutoff = Instant.now().minus(14, ChronoUnit.DAYS);
+        List<CreatorProfile> creators = creatorProfileRepo.findTrending(cutoff, PageRequest.of(0, limit)).getContent();
+        Map<UUID, List<PortfolioItem>> portfolioByCreator = groupPortfolioByCreator(creators);
+        Map<UUID, List<CreatorServiceOffering>> servicesByCreator = groupServicesByCreator(creators);
+        return creators.stream()
+                .map(cp -> mapper.toCreatorResponse(cp, portfolioByCreator.getOrDefault(cp.getUserId(), List.of()),
+                        servicesByCreator.getOrDefault(cp.getUserId(), List.of())))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<CreatorResponse> getSimilarCreators(UUID id, int limit) {
+        CreatorProfile ref = creatorProfileRepo.findByUserId(id)
+                .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        List<CreatorProfile> creators = creatorProfileRepo.findSimilar(
+                id, ref.getCategory(), ref.getTier(), PageRequest.of(0, limit));
         Map<UUID, List<PortfolioItem>> portfolioByCreator = groupPortfolioByCreator(creators);
         Map<UUID, List<CreatorServiceOffering>> servicesByCreator = groupServicesByCreator(creators);
         return creators.stream()

@@ -1,6 +1,7 @@
 package uz.tabriko.dto.response;
 
 import lombok.Data;
+import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.domain.enums.RequisiteSource;
 
 @Data
@@ -9,4 +10,5 @@ public class CreatorRequisiteResponse {
     private String name;
     private String emoji;
     private RequisiteSource source;
+    private OrderType serviceType;
 }

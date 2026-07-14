@@ -6,6 +6,7 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.CreatorRequisite;
 import uz.tabriko.domain.entity.RequisiteCatalog;
+import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.domain.enums.RequisiteSource;
 import uz.tabriko.dto.request.AddCreatorRequisiteRequest;
 import uz.tabriko.dto.request.AdminRequisiteRequest;
@@ -83,27 +84,31 @@ public class RequisiteService {
     // --- Creator self-service ---
 
     @Transactional(readOnly = true)
-    public List<CreatorRequisiteResponse> getCreatorRequisites(UUID creatorId) {
-        return creatorRequisiteRepo.findByCreatorUserIdOrderByCreatedAtAsc(creatorId).stream()
+    public List<CreatorRequisiteResponse> getCreatorRequisites(UUID creatorId, OrderType serviceType) {
+        return creatorRequisiteRepo
+                .findByCreatorUserIdAndServiceTypeOrderByCreatedAtAsc(creatorId, serviceType).stream()
                 .map(this::toCreatorRequisiteResponse)
                 .collect(Collectors.toList());
     }
 
     @Transactional
     public CreatorRequisiteResponse addCreatorRequisite(UUID creatorId, AddCreatorRequisiteRequest req) {
+        OrderType serviceType = req.getServiceType();
+
         boolean hasCatalog = req.getCatalogId() != null;
         boolean hasCustom = req.getCustomName() != null && !req.getCustomName().isBlank();
         if (hasCatalog == hasCustom) {
             throw ApiException.badRequest("Exactly one of catalogId or customName must be provided");
         }
 
-        long count = creatorRequisiteRepo.countByCreatorUserId(creatorId);
+        long count = creatorRequisiteRepo.countByCreatorUserIdAndServiceType(creatorId, serviceType);
         if (count >= MAX_CREATOR_REQUISITES) {
-            throw ApiException.badRequest("Maximum of " + MAX_CREATOR_REQUISITES + " requisites allowed");
+            throw ApiException.badRequest("Maximum of " + MAX_CREATOR_REQUISITES + " requisites allowed per service type");
         }
 
         CreatorRequisite cr = new CreatorRequisite();
         cr.setCreatorUserId(creatorId);
+        cr.setServiceType(serviceType);
 
         if (hasCatalog) {
             RequisiteCatalog catalog = catalogRepo.findById(req.getCatalogId())
@@ -111,7 +116,8 @@ public class RequisiteService {
             if (!catalog.isActive()) {
                 throw ApiException.badRequest("Requisite catalog item is not active");
             }
-            if (creatorRequisiteRepo.existsByCreatorUserIdAndNameIgnoreCase(creatorId, catalog.getName())) {
+            if (creatorRequisiteRepo.existsByCreatorUserIdAndServiceTypeAndNameIgnoreCase(
+                    creatorId, serviceType, catalog.getName())) {
                 throw ApiException.conflict("Requisite with this name already exists");
             }
             cr.setName(catalog.getName());
@@ -120,7 +126,8 @@ public class RequisiteService {
             cr.setSource(RequisiteSource.CATALOG);
         } else {
             String name = req.getCustomName().trim();
-            if (creatorRequisiteRepo.existsByCreatorUserIdAndNameIgnoreCase(creatorId, name)) {
+            if (creatorRequisiteRepo.existsByCreatorUserIdAndServiceTypeAndNameIgnoreCase(
+                    creatorId, serviceType, name)) {
                 throw ApiException.conflict("Requisite with this name already exists");
             }
             cr.setName(name);
@@ -171,6 +178,7 @@ public class RequisiteService {
         resp.setName(cr.getName());
         resp.setEmoji(cr.getEmoji());
         resp.setSource(cr.getSource());
+        resp.setServiceType(cr.getServiceType());
         return resp;
     }
 }

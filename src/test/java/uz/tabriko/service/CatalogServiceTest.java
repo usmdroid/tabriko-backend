@@ -10,9 +10,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import uz.tabriko.common.exception.ApiException;
+import uz.tabriko.domain.entity.Category;
 import uz.tabriko.domain.entity.CreatorProfile;
 import uz.tabriko.domain.entity.PortfolioItem;
 import uz.tabriko.domain.entity.User;
+import uz.tabriko.domain.enums.CreatorTier;
 import uz.tabriko.dto.response.CreatorResponse;
 import uz.tabriko.repository.CategoryRepository;
 import uz.tabriko.repository.CreatorProfileRepository;
@@ -20,10 +23,13 @@ import uz.tabriko.repository.CreatorRequisiteRepository;
 import uz.tabriko.repository.CreatorServiceOfferingRepository;
 import uz.tabriko.repository.PortfolioItemRepository;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -117,6 +123,57 @@ class CatalogServiceTest {
         verify(creatorProfileRepo).findForYou(PageRequest.of(0, 5));
         verify(portfolioRepo, times(1)).findPublicWithConsentByCreatorIds(List.of(creator1));
         verify(portfolioRepo, never()).findPublicWithConsent(any());
+    }
+
+    @Test
+    void getTrendingCreators_batchFetchesPortfolioInOneQuery() {
+        UUID creator1 = UUID.randomUUID();
+        Page<CreatorProfile> page = new PageImpl<>(List.of(profile(creator1)));
+        when(creatorProfileRepo.findTrending(any(Instant.class), any(Pageable.class))).thenReturn(page);
+        when(portfolioRepo.findPublicWithConsentByCreatorIds(anyList()))
+                .thenReturn(List.of(portfolioItemFor(creator1)));
+        when(mapper.toCreatorResponse(any(), anyList(), anyList())).thenReturn(new CreatorResponse());
+
+        List<CreatorResponse> result = catalogService.getTrendingCreators(5);
+
+        verify(creatorProfileRepo).findTrending(any(Instant.class), eq(PageRequest.of(0, 5)));
+        verify(portfolioRepo, times(1)).findPublicWithConsentByCreatorIds(List.of(creator1));
+        verify(portfolioRepo, never()).findPublicWithConsent(any());
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void getSimilarCreators_batchFetchesPortfolioInOneQuery() {
+        UUID refId = UUID.randomUUID();
+        UUID otherId = UUID.randomUUID();
+
+        CreatorProfile ref = profile(refId);
+        ref.setCategory(new Category());
+        ref.setTier(CreatorTier.RISING);
+        when(creatorProfileRepo.findByUserId(refId)).thenReturn(Optional.of(ref));
+
+        CreatorProfile similar = profile(otherId);
+        when(creatorProfileRepo.findSimilar(eq(refId), any(), eq(CreatorTier.RISING), any(Pageable.class)))
+                .thenReturn(List.of(similar));
+        when(portfolioRepo.findPublicWithConsentByCreatorIds(anyList()))
+                .thenReturn(List.of());
+        when(mapper.toCreatorResponse(any(), anyList(), anyList())).thenReturn(new CreatorResponse());
+
+        List<CreatorResponse> result = catalogService.getSimilarCreators(refId, 5);
+
+        verify(creatorProfileRepo).findSimilar(eq(refId), any(), eq(CreatorTier.RISING), eq(PageRequest.of(0, 5)));
+        verify(portfolioRepo, times(1)).findPublicWithConsentByCreatorIds(List.of(otherId));
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    void getSimilarCreators_unknownId_throwsNotFound() {
+        UUID unknownId = UUID.randomUUID();
+        when(creatorProfileRepo.findByUserId(unknownId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> catalogService.getSimilarCreators(unknownId, 5))
+                .isInstanceOf(ApiException.class)
+                .satisfies(e -> assertThat(((ApiException) e).getStatus().value()).isEqualTo(404));
     }
 
     @Test

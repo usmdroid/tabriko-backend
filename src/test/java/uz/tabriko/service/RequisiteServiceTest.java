@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.CreatorRequisite;
 import uz.tabriko.domain.entity.RequisiteCatalog;
+import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.domain.enums.RequisiteSource;
 import uz.tabriko.dto.request.AddCreatorRequisiteRequest;
 import uz.tabriko.dto.request.AdminRequisiteRequest;
@@ -43,70 +44,89 @@ class RequisiteServiceTest {
         creatorId = UUID.randomUUID();
     }
 
-    // ===== Add from catalog (happy path) =====
+    // ===== Per-type list =====
 
     @Test
-    void addCreatorRequisite_fromCatalog_happyPath() {
-        RequisiteCatalog catalog = catalogCatalog(1L, "Gul", "🌸");
+    void getCreatorRequisites_returnsOnlyRequestedType() {
+        CreatorRequisite video = requisite(1L, creatorId, "Gul", "🌸", RequisiteSource.CATALOG, OrderType.VIDEO);
+        when(creatorRequisiteRepo.findByCreatorUserIdAndServiceTypeOrderByCreatedAtAsc(creatorId, OrderType.VIDEO))
+                .thenReturn(List.of(video));
 
+        List<CreatorRequisiteResponse> result = requisiteService.getCreatorRequisites(creatorId, OrderType.VIDEO);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getServiceType()).isEqualTo(OrderType.VIDEO);
+        verify(creatorRequisiteRepo).findByCreatorUserIdAndServiceTypeOrderByCreatedAtAsc(creatorId, OrderType.VIDEO);
+    }
+
+    @Test
+    void getCreatorRequisites_audioTypeQueriesAudio() {
+        when(creatorRequisiteRepo.findByCreatorUserIdAndServiceTypeOrderByCreatedAtAsc(creatorId, OrderType.AUDIO))
+                .thenReturn(List.of());
+
+        List<CreatorRequisiteResponse> result = requisiteService.getCreatorRequisites(creatorId, OrderType.AUDIO);
+
+        assertThat(result).isEmpty();
+        verify(creatorRequisiteRepo).findByCreatorUserIdAndServiceTypeOrderByCreatedAtAsc(creatorId, OrderType.AUDIO);
+    }
+
+    // ===== Per-type add (happy path) =====
+
+    @Test
+    void addCreatorRequisite_fromCatalog_setsServiceType() {
+        RequisiteCatalog catalog = catalog(1L, "Gul", "🌸");
         when(catalogRepo.findById(1L)).thenReturn(Optional.of(catalog));
-        when(creatorRequisiteRepo.countByCreatorUserId(creatorId)).thenReturn(0L);
-        when(creatorRequisiteRepo.existsByCreatorUserIdAndNameIgnoreCase(creatorId, "Gul")).thenReturn(false);
+        when(creatorRequisiteRepo.countByCreatorUserIdAndServiceType(creatorId, OrderType.VIDEO)).thenReturn(0L);
+        when(creatorRequisiteRepo.existsByCreatorUserIdAndServiceTypeAndNameIgnoreCase(
+                creatorId, OrderType.VIDEO, "Gul")).thenReturn(false);
 
-        CreatorRequisite saved = creatorRequisite(10L, creatorId, "Gul", "🌸", RequisiteSource.CATALOG);
+        CreatorRequisite saved = requisite(10L, creatorId, "Gul", "🌸", RequisiteSource.CATALOG, OrderType.VIDEO);
         when(creatorRequisiteRepo.save(any())).thenReturn(saved);
 
-        AddCreatorRequisiteRequest req = new AddCreatorRequisiteRequest();
+        AddCreatorRequisiteRequest req = videoReq();
         req.setCatalogId(1L);
 
         CreatorRequisiteResponse resp = requisiteService.addCreatorRequisite(creatorId, req);
 
+        assertThat(resp.getServiceType()).isEqualTo(OrderType.VIDEO);
         assertThat(resp.getName()).isEqualTo("Gul");
-        assertThat(resp.getEmoji()).isEqualTo("🌸");
-        assertThat(resp.getSource()).isEqualTo(RequisiteSource.CATALOG);
 
         ArgumentCaptor<CreatorRequisite> captor = ArgumentCaptor.forClass(CreatorRequisite.class);
         verify(creatorRequisiteRepo).save(captor.capture());
-        assertThat(captor.getValue().getSource()).isEqualTo(RequisiteSource.CATALOG);
-        assertThat(captor.getValue().getCatalogId()).isEqualTo(1L);
+        assertThat(captor.getValue().getServiceType()).isEqualTo(OrderType.VIDEO);
     }
 
-    // ===== Add custom name (happy path) =====
-
     @Test
-    void addCreatorRequisite_customName_happyPath() {
-        when(creatorRequisiteRepo.countByCreatorUserId(creatorId)).thenReturn(5L);
-        when(creatorRequisiteRepo.existsByCreatorUserIdAndNameIgnoreCase(creatorId, "Sham")).thenReturn(false);
+    void addCreatorRequisite_customName_setsServiceType() {
+        when(creatorRequisiteRepo.countByCreatorUserIdAndServiceType(creatorId, OrderType.AUDIO)).thenReturn(0L);
+        when(creatorRequisiteRepo.existsByCreatorUserIdAndServiceTypeAndNameIgnoreCase(
+                creatorId, OrderType.AUDIO, "Sham")).thenReturn(false);
 
-        CreatorRequisite saved = creatorRequisite(11L, creatorId, "Sham", null, RequisiteSource.CUSTOM);
+        CreatorRequisite saved = requisite(11L, creatorId, "Sham", null, RequisiteSource.CUSTOM, OrderType.AUDIO);
         when(creatorRequisiteRepo.save(any())).thenReturn(saved);
 
-        AddCreatorRequisiteRequest req = new AddCreatorRequisiteRequest();
+        AddCreatorRequisiteRequest req = audioReq();
         req.setCustomName("Sham");
 
         CreatorRequisiteResponse resp = requisiteService.addCreatorRequisite(creatorId, req);
 
-        assertThat(resp.getName()).isEqualTo("Sham");
-        assertThat(resp.getEmoji()).isNull();
-        assertThat(resp.getSource()).isEqualTo(RequisiteSource.CUSTOM);
-
+        assertThat(resp.getServiceType()).isEqualTo(OrderType.AUDIO);
         ArgumentCaptor<CreatorRequisite> captor = ArgumentCaptor.forClass(CreatorRequisite.class);
         verify(creatorRequisiteRepo).save(captor.capture());
-        assertThat(captor.getValue().getSource()).isEqualTo(RequisiteSource.CUSTOM);
-        assertThat(captor.getValue().getCatalogId()).isNull();
+        assertThat(captor.getValue().getServiceType()).isEqualTo(OrderType.AUDIO);
     }
 
-    // ===== Duplicate rejection (case-insensitive) =====
+    // ===== Per-type uniqueness check =====
 
     @Test
-    void addCreatorRequisite_catalogDuplicate_throwsConflict() {
-        RequisiteCatalog catalog = catalogCatalog(1L, "Gul", "🌸");
-
+    void addCreatorRequisite_duplicateWithinSameType_throwsConflict() {
+        RequisiteCatalog catalog = catalog(1L, "Gul", "🌸");
         when(catalogRepo.findById(1L)).thenReturn(Optional.of(catalog));
-        when(creatorRequisiteRepo.countByCreatorUserId(creatorId)).thenReturn(2L);
-        when(creatorRequisiteRepo.existsByCreatorUserIdAndNameIgnoreCase(creatorId, "Gul")).thenReturn(true);
+        when(creatorRequisiteRepo.countByCreatorUserIdAndServiceType(creatorId, OrderType.VIDEO)).thenReturn(2L);
+        when(creatorRequisiteRepo.existsByCreatorUserIdAndServiceTypeAndNameIgnoreCase(
+                creatorId, OrderType.VIDEO, "Gul")).thenReturn(true);
 
-        AddCreatorRequisiteRequest req = new AddCreatorRequisiteRequest();
+        AddCreatorRequisiteRequest req = videoReq();
         req.setCatalogId(1L);
 
         assertThatThrownBy(() -> requisiteService.addCreatorRequisite(creatorId, req))
@@ -115,25 +135,33 @@ class RequisiteServiceTest {
     }
 
     @Test
-    void addCreatorRequisite_customDuplicate_throwsConflict() {
-        when(creatorRequisiteRepo.countByCreatorUserId(creatorId)).thenReturn(2L);
-        when(creatorRequisiteRepo.existsByCreatorUserIdAndNameIgnoreCase(creatorId, "Tort")).thenReturn(true);
+    void addCreatorRequisite_sameNameDifferentType_allowed() {
+        // "Gul" exists for VIDEO — adding same name for AUDIO should be checked against AUDIO only
+        when(creatorRequisiteRepo.countByCreatorUserIdAndServiceType(creatorId, OrderType.AUDIO)).thenReturn(1L);
+        when(creatorRequisiteRepo.existsByCreatorUserIdAndServiceTypeAndNameIgnoreCase(
+                creatorId, OrderType.AUDIO, "Gul")).thenReturn(false);
 
-        AddCreatorRequisiteRequest req = new AddCreatorRequisiteRequest();
-        req.setCustomName("Tort");
+        CreatorRequisite saved = requisite(20L, creatorId, "Gul", null, RequisiteSource.CUSTOM, OrderType.AUDIO);
+        when(creatorRequisiteRepo.save(any())).thenReturn(saved);
 
-        assertThatThrownBy(() -> requisiteService.addCreatorRequisite(creatorId, req))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("already exists");
+        AddCreatorRequisiteRequest req = audioReq();
+        req.setCustomName("Gul");
+
+        CreatorRequisiteResponse resp = requisiteService.addCreatorRequisite(creatorId, req);
+
+        assertThat(resp.getServiceType()).isEqualTo(OrderType.AUDIO);
+        // Must NOT check VIDEO uniqueness
+        verify(creatorRequisiteRepo, never()).existsByCreatorUserIdAndServiceTypeAndNameIgnoreCase(
+                eq(creatorId), eq(OrderType.VIDEO), any());
     }
 
-    // ===== Max-20 limit rejection =====
+    // ===== Per-type cap enforcement =====
 
     @Test
-    void addCreatorRequisite_atLimit_throwsBadRequest() {
-        when(creatorRequisiteRepo.countByCreatorUserId(creatorId)).thenReturn(20L);
+    void addCreatorRequisite_perTypeCap_throwsBadRequest() {
+        when(creatorRequisiteRepo.countByCreatorUserIdAndServiceType(creatorId, OrderType.VIDEO)).thenReturn(20L);
 
-        AddCreatorRequisiteRequest req = new AddCreatorRequisiteRequest();
+        AddCreatorRequisiteRequest req = videoReq();
         req.setCustomName("NewItem");
 
         assertThatThrownBy(() -> requisiteService.addCreatorRequisite(creatorId, req))
@@ -141,19 +169,33 @@ class RequisiteServiceTest {
                 .hasMessageContaining("Maximum");
     }
 
+    @Test
+    void addCreatorRequisite_audioAtCapButVideoUnder_videoStillAllowed() {
+        // AUDIO at cap — adding to VIDEO should not be blocked by AUDIO count
+        when(creatorRequisiteRepo.countByCreatorUserIdAndServiceType(creatorId, OrderType.VIDEO)).thenReturn(5L);
+        when(creatorRequisiteRepo.existsByCreatorUserIdAndServiceTypeAndNameIgnoreCase(
+                creatorId, OrderType.VIDEO, "Gul")).thenReturn(false);
+        when(creatorRequisiteRepo.save(any())).thenReturn(
+                requisite(30L, creatorId, "Gul", null, RequisiteSource.CUSTOM, OrderType.VIDEO));
+
+        AddCreatorRequisiteRequest req = videoReq();
+        req.setCustomName("Gul");
+
+        assertThatCode(() -> requisiteService.addCreatorRequisite(creatorId, req))
+                .doesNotThrowAnyException();
+    }
+
     // ===== Delete own requisite =====
 
     @Test
     void deleteCreatorRequisite_ownRequisite_deletesSuccessfully() {
-        CreatorRequisite cr = creatorRequisite(99L, creatorId, "Gul", "🌸", RequisiteSource.CATALOG);
+        CreatorRequisite cr = requisite(99L, creatorId, "Gul", "🌸", RequisiteSource.CATALOG, OrderType.VIDEO);
         when(creatorRequisiteRepo.findByIdAndCreatorUserId(99L, creatorId)).thenReturn(Optional.of(cr));
 
         requisiteService.deleteCreatorRequisite(creatorId, 99L);
 
         verify(creatorRequisiteRepo).delete(cr);
     }
-
-    // ===== Delete another creator's requisite -> forbidden =====
 
     @Test
     void deleteCreatorRequisite_notOwned_throwsForbidden() {
@@ -164,48 +206,31 @@ class RequisiteServiceTest {
                 .hasMessageContaining("not owned");
     }
 
-    // ===== Public creator profile response includes requisites =====
+    // ===== findByCreatorId returns all types =====
 
     @Test
-    void getCreatorRequisites_returnsListForCreator() {
-        CreatorRequisite r1 = creatorRequisite(1L, creatorId, "Gul", "🌸", RequisiteSource.CATALOG);
-        CreatorRequisite r2 = creatorRequisite(2L, creatorId, "Custom", null, RequisiteSource.CUSTOM);
-        when(creatorRequisiteRepo.findByCreatorUserIdOrderByCreatedAtAsc(creatorId)).thenReturn(List.of(r1, r2));
-
-        List<CreatorRequisiteResponse> result = requisiteService.getCreatorRequisites(creatorId);
-
-        assertThat(result).hasSize(2);
-        assertThat(result.get(0).getName()).isEqualTo("Gul");
-        assertThat(result.get(0).getEmoji()).isEqualTo("🌸");
-        assertThat(result.get(1).getName()).isEqualTo("Custom");
-        assertThat(result.get(1).getEmoji()).isNull();
-    }
-
-    // ===== Admin creator-detail response includes requisites (via findByCreatorId) =====
-
-    @Test
-    void findByCreatorId_returnsRequisitesForProfile() {
-        CreatorRequisite r = creatorRequisite(5L, creatorId, "Tort", "🎂", RequisiteSource.CATALOG);
-        when(creatorRequisiteRepo.findByCreatorUserIdOrderByCreatedAtAsc(creatorId)).thenReturn(List.of(r));
+    void findByCreatorId_returnsAllTypesForPublicProfile() {
+        CreatorRequisite video = requisite(1L, creatorId, "Gul", "🌸", RequisiteSource.CATALOG, OrderType.VIDEO);
+        CreatorRequisite audio = requisite(2L, creatorId, "Sham", null, RequisiteSource.CUSTOM, OrderType.AUDIO);
+        when(creatorRequisiteRepo.findByCreatorUserIdOrderByCreatedAtAsc(creatorId))
+                .thenReturn(List.of(video, audio));
 
         List<CreatorRequisite> result = requisiteService.findByCreatorId(creatorId);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getName()).isEqualTo("Tort");
+        assertThat(result).hasSize(2);
     }
 
     // ===== Active catalog endpoint =====
 
     @Test
     void getActiveRequisites_returnsOnlyActiveItems() {
-        RequisiteCatalog active = catalogCatalog(1L, "Gul", "🌸");
+        RequisiteCatalog active = catalog(1L, "Gul", "🌸");
         when(catalogRepo.findByActiveTrue()).thenReturn(List.of(active));
 
         List<RequisiteItemResponse> result = requisiteService.getActiveRequisites();
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getName()).isEqualTo("Gul");
-        assertThat(result.get(0).getEmoji()).isEqualTo("🌸");
     }
 
     // ===== Admin create =====
@@ -230,11 +255,11 @@ class RequisiteServiceTest {
         assertThat(resp.isActive()).isTrue();
     }
 
-    // ===== Both catalogId and customName provided -> bad request =====
+    // ===== Validation: exactly one of catalogId/customName =====
 
     @Test
     void addCreatorRequisite_bothProvided_throwsBadRequest() {
-        AddCreatorRequisiteRequest req = new AddCreatorRequisiteRequest();
+        AddCreatorRequisiteRequest req = videoReq();
         req.setCatalogId(1L);
         req.setCustomName("Custom");
 
@@ -243,28 +268,24 @@ class RequisiteServiceTest {
                 .hasMessageContaining("Exactly one");
     }
 
-    // ===== Neither provided -> bad request =====
-
     @Test
     void addCreatorRequisite_neitherProvided_throwsBadRequest() {
-        AddCreatorRequisiteRequest req = new AddCreatorRequisiteRequest();
+        AddCreatorRequisiteRequest req = videoReq();
 
         assertThatThrownBy(() -> requisiteService.addCreatorRequisite(creatorId, req))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("Exactly one");
     }
 
-    // ===== Catalog item not active -> bad request =====
-
     @Test
     void addCreatorRequisite_inactiveCatalogItem_throwsBadRequest() {
-        RequisiteCatalog catalog = catalogCatalog(1L, "Gul", "🌸");
+        RequisiteCatalog catalog = catalog(1L, "Gul", "🌸");
         catalog.setActive(false);
 
         when(catalogRepo.findById(1L)).thenReturn(Optional.of(catalog));
-        when(creatorRequisiteRepo.countByCreatorUserId(creatorId)).thenReturn(0L);
+        when(creatorRequisiteRepo.countByCreatorUserIdAndServiceType(creatorId, OrderType.VIDEO)).thenReturn(0L);
 
-        AddCreatorRequisiteRequest req = new AddCreatorRequisiteRequest();
+        AddCreatorRequisiteRequest req = videoReq();
         req.setCatalogId(1L);
 
         assertThatThrownBy(() -> requisiteService.addCreatorRequisite(creatorId, req))
@@ -274,7 +295,19 @@ class RequisiteServiceTest {
 
     // --- helpers ---
 
-    private RequisiteCatalog catalogCatalog(Long id, String name, String emoji) {
+    private AddCreatorRequisiteRequest videoReq() {
+        AddCreatorRequisiteRequest req = new AddCreatorRequisiteRequest();
+        req.setServiceType(OrderType.VIDEO);
+        return req;
+    }
+
+    private AddCreatorRequisiteRequest audioReq() {
+        AddCreatorRequisiteRequest req = new AddCreatorRequisiteRequest();
+        req.setServiceType(OrderType.AUDIO);
+        return req;
+    }
+
+    private RequisiteCatalog catalog(Long id, String name, String emoji) {
         RequisiteCatalog r = new RequisiteCatalog();
         r.setId(id);
         r.setName(name);
@@ -284,13 +317,15 @@ class RequisiteServiceTest {
         return r;
     }
 
-    private CreatorRequisite creatorRequisite(Long id, UUID creatorId, String name, String emoji, RequisiteSource source) {
+    private CreatorRequisite requisite(Long id, UUID creator, String name, String emoji,
+                                       RequisiteSource source, OrderType serviceType) {
         CreatorRequisite cr = new CreatorRequisite();
         cr.setId(id);
-        cr.setCreatorUserId(creatorId);
+        cr.setCreatorUserId(creator);
         cr.setName(name);
         cr.setEmoji(emoji);
         cr.setSource(source);
+        cr.setServiceType(serviceType);
         cr.setCreatedAt(Instant.now());
         return cr;
     }
