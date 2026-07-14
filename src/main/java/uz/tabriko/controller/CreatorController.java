@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.domain.enums.OrderType;
+import uz.tabriko.dto.request.AddCreatorRequisiteRequest;
 import uz.tabriko.dto.request.UpdateCreatorKycRequest;
 import uz.tabriko.dto.request.UpdateCreatorProfileRequest;
 import uz.tabriko.dto.request.UpdateCreatorServiceRequest;
@@ -20,12 +21,14 @@ import uz.tabriko.dto.request.UpdatePayoutRequest;
 import uz.tabriko.dto.request.UpdatePortfolioVisibilityRequest;
 import uz.tabriko.dto.request.UpdateSocialRequest;
 import uz.tabriko.dto.response.CreatorKycResponse;
+import uz.tabriko.dto.response.CreatorRequisiteResponse;
 import uz.tabriko.dto.response.CreatorSelfProfileResponse;
 import uz.tabriko.dto.response.CreatorServiceResponse;
 import uz.tabriko.dto.response.EarningsResponse;
 import uz.tabriko.dto.response.PortfolioItemResponse;
 import uz.tabriko.security.UserPrincipal;
 import uz.tabriko.service.CreatorService;
+import uz.tabriko.service.RequisiteService;
 
 import java.util.List;
 import java.util.UUID;
@@ -38,6 +41,7 @@ import java.util.UUID;
 public class CreatorController {
 
     private final CreatorService creatorService;
+    private final RequisiteService requisiteService;
 
     @GetMapping("/profile")
     @Operation(summary = "Get own creator profile")
@@ -185,5 +189,35 @@ public class CreatorController {
     ) {
         return ResponseEntity.ok(BaseResponse.ok(
                 creatorService.updateService(principal.getUserId(), type, req)));
+    }
+
+    // --- Requisites ---
+
+    @GetMapping("/requisites")
+    @Operation(summary = "Get own requisite list")
+    public ResponseEntity<BaseResponse<List<CreatorRequisiteResponse>>> getRequisites(
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(requisiteService.getCreatorRequisites(principal.getUserId())));
+    }
+
+    @PostMapping("/requisites")
+    @Operation(summary = "Add a requisite (from catalog or custom)")
+    public ResponseEntity<BaseResponse<CreatorRequisiteResponse>> addRequisite(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody AddCreatorRequisiteRequest req
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(BaseResponse.created(requisiteService.addCreatorRequisite(principal.getUserId(), req)));
+    }
+
+    @DeleteMapping("/requisites/{id}")
+    @Operation(summary = "Delete own requisite")
+    public ResponseEntity<BaseResponse<Void>> deleteRequisite(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long id
+    ) {
+        requisiteService.deleteCreatorRequisite(principal.getUserId(), id);
+        return ResponseEntity.ok(BaseResponse.ok());
     }
 }

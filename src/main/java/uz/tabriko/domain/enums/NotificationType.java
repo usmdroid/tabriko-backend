@@ -7,6 +7,7 @@ public enum NotificationType {
     ORDER_REJECTED,
     ORDER_REFUNDED,
     ORDER_VIEWED,
+    ORDER_MESSAGE,
     REVIEW_RECEIVED,
     SYSTEM
 }

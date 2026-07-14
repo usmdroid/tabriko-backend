@@ -11,6 +11,7 @@ import uz.tabriko.common.util.PhoneUtil;
 import uz.tabriko.domain.entity.Category;
 import uz.tabriko.domain.entity.CreatorContact;
 import uz.tabriko.domain.entity.CreatorProfile;
+import uz.tabriko.domain.entity.CreatorRequisite;
 import uz.tabriko.domain.entity.Order;
 import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
@@ -59,6 +60,7 @@ public class AdminService {
     private final PlatformSettingsRepository settingsRepo;
     private final WalletTransactionRepository walletTxRepo;
     private final CreatorContactRepository contactRepo;
+    private final CreatorRequisiteRepository creatorRequisiteRepo;
     private final PaymentGateway paymentGateway;
     private final NotificationService notificationService;
     private final PushNotificationService pushService;
@@ -399,6 +401,14 @@ public class AdminService {
                 .orElseThrow(() -> ApiException.notFound("Creator not found"));
         CreatorResponse r = mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(creatorId));
         r.setContacts(mapper.toContactResponses(contactRepo.findByCreatorIdOrderByCreatedAtAsc(creatorId)));
+        List<CreatorRequisite> requisites = creatorRequisiteRepo.findByCreatorUserIdOrderByCreatedAtAsc(creatorId);
+        r.setRequisites(requisites.stream().map(cr -> {
+            RequisiteItemResponse ri = new RequisiteItemResponse();
+            ri.setId(cr.getId());
+            ri.setName(cr.getName());
+            ri.setEmoji(cr.getEmoji());
+            return ri;
+        }).collect(Collectors.toList()));
         return r;
     }
 

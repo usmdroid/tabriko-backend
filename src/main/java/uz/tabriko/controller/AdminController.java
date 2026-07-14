@@ -14,8 +14,10 @@ import uz.tabriko.dto.request.AddCreatorRequest;
 import uz.tabriko.dto.request.AdminCategoryRequest;
 import uz.tabriko.dto.request.AdminOccasionRequest;
 import uz.tabriko.dto.request.AdminPromotionRequest;
+import uz.tabriko.dto.request.AdminRequisiteRequest;
 import uz.tabriko.dto.request.BroadcastNotificationRequest;
 import uz.tabriko.dto.request.FlagCreatorRequest;
+import uz.tabriko.dto.request.PatchRequisiteRequest;
 import uz.tabriko.dto.request.UserNotifyRequest;
 import uz.tabriko.dto.response.NotifyResultResponse;
 import uz.tabriko.dto.response.PlatformSettings;
@@ -23,6 +25,7 @@ import uz.tabriko.service.AdminBroadcastService;
 import uz.tabriko.service.AdminService;
 import uz.tabriko.service.OccasionService;
 import uz.tabriko.service.PromotionService;
+import uz.tabriko.service.RequisiteService;
 
 import java.util.UUID;
 
@@ -37,6 +40,7 @@ public class AdminController {
     private final OccasionService occasionService;
     private final PromotionService promotionService;
     private final AdminBroadcastService adminBroadcastService;
+    private final RequisiteService requisiteService;
 
     // --- Notifications ---
 
@@ -316,5 +320,39 @@ public class AdminController {
     @PreAuthorize("hasRole('SUPERADMIN')")
     public ResponseEntity<BaseResponse<?>> updateSettings(@RequestBody PlatformSettings dto) {
         return ResponseEntity.ok(BaseResponse.ok(adminService.updateSettings(dto)));
+    }
+
+    // --- Requisites ---
+
+    @GetMapping("/requisites")
+    @Operation(summary = "List all requisites — active and inactive")
+    public ResponseEntity<BaseResponse<?>> listRequisites() {
+        return ResponseEntity.ok(BaseResponse.ok(requisiteService.getAdminRequisites()));
+    }
+
+    @PostMapping("/requisites")
+    @Operation(summary = "Create a new requisite catalog item")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> createRequisite(@Valid @RequestBody AdminRequisiteRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(BaseResponse.created(requisiteService.createRequisite(req)));
+    }
+
+    @PatchMapping("/requisites/{id}")
+    @Operation(summary = "Update a requisite catalog item")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> patchRequisite(
+            @PathVariable Long id,
+            @Valid @RequestBody PatchRequisiteRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(requisiteService.patchRequisite(id, req)));
+    }
+
+    @DeleteMapping("/requisites/{id}")
+    @Operation(summary = "Deactivate a requisite catalog item")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> deleteRequisite(@PathVariable Long id) {
+        requisiteService.deleteRequisite(id);
+        return ResponseEntity.ok(BaseResponse.ok());
     }
 }

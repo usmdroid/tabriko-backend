@@ -59,6 +59,7 @@ class AdminServiceTest {
     @Mock PlatformSettingsRepository settingsRepo;
     @Mock uz.tabriko.repository.WalletTransactionRepository walletTxRepo;
     @Mock CreatorContactRepository contactRepo;
+    @Mock uz.tabriko.repository.CreatorRequisiteRepository creatorRequisiteRepo;
     @Mock uz.tabriko.infrastructure.payment.PaymentGateway paymentGateway;
     @Mock NotificationService notificationService;
     @Mock PushNotificationService pushService;

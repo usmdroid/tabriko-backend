@@ -11,9 +11,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.*;
 import uz.tabriko.domain.enums.*;
+import uz.tabriko.domain.entity.OrderMessage;
 import uz.tabriko.dto.request.CreateOrderRequest;
+import uz.tabriko.dto.request.CreatorRejectOrderRequest;
 import uz.tabriko.dto.request.DeliverOrderRequest;
 import uz.tabriko.dto.request.RejectOrderRequest;
+import uz.tabriko.dto.request.SendMessageRequest;
+import uz.tabriko.dto.response.OrderMessageResponse;
 import uz.tabriko.dto.response.OrderResponse;
 import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.infrastructure.payment.PaymentGateway;
@@ -39,6 +43,7 @@ class OrderServiceTest {
     @Mock CreatorProfileRepository creatorProfileRepo;
     @Mock CreatorServiceOfferingRepository serviceOfferingRepo;
     @Mock UserRepository userRepo;
+    @Mock OrderMessageRepository orderMessageRepo;
     @Mock PaymentGateway paymentGateway;
     @Mock MediaStorageService mediaStorage;
     @Mock NotificationService notificationService;
@@ -443,6 +448,138 @@ class OrderServiceTest {
         assertThatThrownBy(() -> orderService.updateConsent(UUID.randomUUID(), orderId, true))
             .isInstanceOf(ApiException.class)
             .hasMessageContaining("Not your order");
+    }
+
+    // ===== CREATOR ACCEPT =====
+
+    @Test
+    void creatorAcceptOrder_happyPath_pendingToInProgress() {
+        order.setStatus(OrderStatus.PENDING);
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(mapper.toOrderResponse(any(), any(), any())).thenReturn(new OrderResponse());
+
+        orderService.creatorAcceptOrder(creatorId, orderId);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.IN_PROGRESS);
+        verify(orderRepo).save(order);
+    }
+
+    @Test
+    void creatorAcceptOrder_wrongStatus_throwsBadRequest() {
+        order.setStatus(OrderStatus.DELIVERED);
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.creatorAcceptOrder(creatorId, orderId))
+                .isInstanceOf(ApiException.class);
+        verify(orderRepo, never()).save(any());
+    }
+
+    @Test
+    void creatorAcceptOrder_wrongUser_throwsForbidden() {
+        order.setStatus(OrderStatus.PENDING);
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.creatorAcceptOrder(UUID.randomUUID(), orderId))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("Not your order");
+    }
+
+    // ===== CREATOR REJECT =====
+
+    @Test
+    void creatorRejectOrder_happyPath_pendingToRejected() {
+        order.setStatus(OrderStatus.PENDING);
+        CreatorRejectOrderRequest req = new CreatorRejectOrderRequest();
+        req.setRejectionReason("Too busy");
+
+        when(orderRepo.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+        when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(paymentGateway.refund(any(), any(), any())).thenReturn(PaymentResult.ok("mock-tx"));
+        when(mapper.toOrderResponse(any(), any(), any())).thenReturn(new OrderResponse());
+
+        orderService.creatorRejectOrder(creatorId, orderId, req);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.REJECTED);
+        assertThat(order.getRejectionReason()).isEqualTo("Too busy");
+        verify(paymentGateway).refund(eq(clientId), any(), eq(orderId));
+    }
+
+    // ===== DELIVER GATE =====
+
+    @Test
+    void deliverOrder_blockedWhenStatusPending() {
+        order.setStatus(OrderStatus.PENDING);
+        CreatorProfile profile = new CreatorProfile();
+        profile.setUser(creator);
+        profile.setProfileComplete(true);
+        DeliverOrderRequest req = new DeliverOrderRequest();
+        req.setMediaUrl("https://cdn/video.mp4");
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(profile));
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.deliverOrder(creatorId, orderId, req))
+                .isInstanceOf(ApiException.class);
+    }
+
+    // ===== ORDER MESSAGES =====
+
+    @Test
+    void sendOrderMessage_nonParticipant_throwsForbidden() {
+        order.setStatus(OrderStatus.IN_PROGRESS);
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+
+        SendMessageRequest req = new SendMessageRequest();
+        req.setText("Hello");
+
+        assertThatThrownBy(() -> orderService.sendOrderMessage(UUID.randomUUID(), orderId, req))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("Not your order");
+    }
+
+    @Test
+    void sendOrderMessage_statusPending_throwsBadRequest() {
+        order.setStatus(OrderStatus.PENDING);
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+
+        SendMessageRequest req = new SendMessageRequest();
+        req.setText("Hello");
+
+        assertThatThrownBy(() -> orderService.sendOrderMessage(clientId, orderId, req))
+                .isInstanceOf(ApiException.class);
+        verify(orderMessageRepo, never()).save(any());
+    }
+
+    @Test
+    void sendOrderMessage_happyPath_inProgress() {
+        order.setStatus(OrderStatus.IN_PROGRESS);
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderMessageRepo.save(any())).thenAnswer(inv -> {
+            OrderMessage msg = inv.getArgument(0);
+            msg.setId(1L);
+            return msg;
+        });
+
+        SendMessageRequest req = new SendMessageRequest();
+        req.setText("Ready to start!");
+
+        OrderMessageResponse resp = orderService.sendOrderMessage(clientId, orderId, req);
+
+        assertThat(resp.getAuthor()).isEqualTo(MessageAuthor.CLIENT);
+        assertThat(resp.getText()).isEqualTo("Ready to start!");
+        verify(orderMessageRepo).save(any());
+        verify(notificationService).sendNotification(
+                eq(creatorId), any(), any(), eq(NotificationType.ORDER_MESSAGE), eq(orderId));
+    }
+
+    @Test
+    void getOrderMessages_nonParticipant_throwsForbidden() {
+        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.getOrderMessages(UUID.randomUUID(), orderId))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("Not your order");
     }
 
     // ===== helpers =====

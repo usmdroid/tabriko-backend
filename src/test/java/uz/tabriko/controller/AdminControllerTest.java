@@ -45,6 +45,7 @@ class AdminControllerTest {
     @MockBean uz.tabriko.service.OccasionService occasionService;
     @MockBean uz.tabriko.service.PromotionService promotionService;
     @MockBean uz.tabriko.service.AdminBroadcastService adminBroadcastService;
+    @MockBean uz.tabriko.service.RequisiteService requisiteService;
     @MockBean uz.tabriko.security.JwtUtil jwtUtil;
     @MockBean uz.tabriko.repository.UserDeviceRepository userDeviceRepository;
     @MockBean uz.tabriko.repository.PlatformSettingsRepository platformSettingsRepository;

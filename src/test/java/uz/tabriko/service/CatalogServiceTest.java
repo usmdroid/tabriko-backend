@@ -16,6 +16,7 @@ import uz.tabriko.domain.entity.User;
 import uz.tabriko.dto.response.CreatorResponse;
 import uz.tabriko.repository.CategoryRepository;
 import uz.tabriko.repository.CreatorProfileRepository;
+import uz.tabriko.repository.CreatorRequisiteRepository;
 import uz.tabriko.repository.CreatorServiceOfferingRepository;
 import uz.tabriko.repository.PortfolioItemRepository;
 
@@ -35,6 +36,7 @@ class CatalogServiceTest {
     @Mock CreatorProfileRepository creatorProfileRepo;
     @Mock PortfolioItemRepository portfolioRepo;
     @Mock CreatorServiceOfferingRepository serviceOfferingRepo;
+    @Mock CreatorRequisiteRepository creatorRequisiteRepo;
     @Mock UserMapper mapper;
 
     @InjectMocks CatalogService catalogService;
@@ -122,6 +124,7 @@ class CatalogServiceTest {
         UUID creatorId = UUID.randomUUID();
         when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(java.util.Optional.of(profile(creatorId)));
         when(portfolioRepo.findPublicWithConsent(creatorId)).thenReturn(List.of(portfolioItemFor(creatorId)));
+        when(mapper.toCreatorResponse(any(), anyList(), anyList())).thenReturn(new CreatorResponse());
 
         catalogService.getCreator(creatorId);
 

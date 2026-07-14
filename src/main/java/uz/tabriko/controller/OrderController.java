@@ -11,8 +11,10 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.dto.request.CreateOrderRequest;
+import uz.tabriko.dto.request.CreatorRejectOrderRequest;
 import uz.tabriko.dto.request.DeliverOrderRequest;
 import uz.tabriko.dto.request.RejectOrderRequest;
+import uz.tabriko.dto.request.SendMessageRequest;
 import uz.tabriko.dto.request.UpdateConsentRequest;
 import uz.tabriko.dto.request.UpdatePrivacyRequest;
 import uz.tabriko.security.UserPrincipal;
@@ -88,6 +90,47 @@ public class OrderController {
             @Valid @RequestBody RejectOrderRequest req
     ) {
         return ResponseEntity.ok(BaseResponse.ok(orderService.rejectOrder(principal.getUserId(), id, req)));
+    }
+
+    @PostMapping("/{id}/creator-accept")
+    @PreAuthorize("hasRole('CREATOR')")
+    @Operation(summary = "Creator accepts a pending order")
+    public ResponseEntity<BaseResponse<?>> creatorAcceptOrder(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID id
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(orderService.creatorAcceptOrder(principal.getUserId(), id)));
+    }
+
+    @PostMapping("/{id}/creator-reject")
+    @PreAuthorize("hasRole('CREATOR')")
+    @Operation(summary = "Creator rejects a pending order")
+    public ResponseEntity<BaseResponse<?>> creatorRejectOrder(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID id,
+            @Valid @RequestBody(required = false) CreatorRejectOrderRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(orderService.creatorRejectOrder(principal.getUserId(), id, req)));
+    }
+
+    @GetMapping("/{id}/messages")
+    @Operation(summary = "Get order chat messages")
+    public ResponseEntity<BaseResponse<?>> getOrderMessages(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID id
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(orderService.getOrderMessages(principal.getUserId(), id)));
+    }
+
+    @PostMapping("/{id}/messages")
+    @Operation(summary = "Send a message in the order chat")
+    public ResponseEntity<BaseResponse<?>> sendOrderMessage(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID id,
+            @Valid @RequestBody SendMessageRequest req
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(BaseResponse.created(orderService.sendOrderMessage(principal.getUserId(), id, req)));
     }
 
     @PostMapping("/{id}/seen")

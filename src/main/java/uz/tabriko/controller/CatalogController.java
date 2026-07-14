@@ -9,6 +9,7 @@ import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.service.CatalogService;
 import uz.tabriko.service.OccasionService;
 import uz.tabriko.service.PromotionService;
+import uz.tabriko.service.RequisiteService;
 
 import java.util.UUID;
 
@@ -21,6 +22,7 @@ public class CatalogController {
     private final CatalogService catalogService;
     private final OccasionService occasionService;
     private final PromotionService promotionService;
+    private final RequisiteService requisiteService;
 
     @GetMapping("/categories")
     @Operation(summary = "List all categories")
@@ -71,5 +73,11 @@ public class CatalogController {
     @Operation(summary = "Active promotions for the home screen carousel")
     public ResponseEntity<BaseResponse<?>> getPromotions() {
         return ResponseEntity.ok(BaseResponse.ok(promotionService.getActive()));
+    }
+
+    @GetMapping("/catalog/requisites")
+    @Operation(summary = "Active requisite catalog items")
+    public ResponseEntity<BaseResponse<?>> getRequisites() {
+        return ResponseEntity.ok(BaseResponse.ok(requisiteService.getActiveRequisites()));
     }
 }

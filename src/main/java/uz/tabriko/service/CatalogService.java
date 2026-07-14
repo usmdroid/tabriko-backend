@@ -8,13 +8,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.CreatorProfile;
+import uz.tabriko.domain.entity.CreatorRequisite;
 import uz.tabriko.domain.entity.CreatorServiceOffering;
 import uz.tabriko.domain.entity.PortfolioItem;
 import uz.tabriko.dto.response.CategoryResponse;
 import uz.tabriko.dto.response.CreatorResponse;
 import uz.tabriko.dto.response.PageResponse;
+import uz.tabriko.dto.response.RequisiteItemResponse;
 import uz.tabriko.repository.CategoryRepository;
 import uz.tabriko.repository.CreatorProfileRepository;
+import uz.tabriko.repository.CreatorRequisiteRepository;
 import uz.tabriko.repository.CreatorServiceOfferingRepository;
 import uz.tabriko.repository.PortfolioItemRepository;
 
@@ -31,6 +34,7 @@ public class CatalogService {
     private final CreatorProfileRepository creatorProfileRepo;
     private final PortfolioItemRepository portfolioRepo;
     private final CreatorServiceOfferingRepository serviceOfferingRepo;
+    private final CreatorRequisiteRepository creatorRequisiteRepo;
     private final UserMapper mapper;
 
     public List<CategoryResponse> getCategories() {
@@ -80,7 +84,16 @@ public class CatalogService {
                 .orElseThrow(() -> ApiException.notFound("Creator not found"));
         List<PortfolioItem> portfolio = portfolioRepo.findPublicWithConsent(creatorId);
         List<CreatorServiceOffering> services = serviceOfferingRepo.findByCreator_Id(creatorId);
-        return mapper.toCreatorResponse(cp, portfolio, services);
+        CreatorResponse r = mapper.toCreatorResponse(cp, portfolio, services);
+        List<CreatorRequisite> requisites = creatorRequisiteRepo.findByCreatorUserIdOrderByCreatedAtAsc(creatorId);
+        r.setRequisites(requisites.stream().map(cr -> {
+            RequisiteItemResponse ri = new RequisiteItemResponse();
+            ri.setId(cr.getId());
+            ri.setName(cr.getName());
+            ri.setEmoji(cr.getEmoji());
+            return ri;
+        }).collect(Collectors.toList()));
+        return r;
     }
 
     private Map<UUID, List<PortfolioItem>> groupPortfolioByCreator(List<CreatorProfile> creators) {

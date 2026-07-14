@@ -9,9 +9,13 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.*;
 import uz.tabriko.domain.enums.*;
+import uz.tabriko.domain.entity.OrderMessage;
 import uz.tabriko.dto.request.CreateOrderRequest;
+import uz.tabriko.dto.request.CreatorRejectOrderRequest;
 import uz.tabriko.dto.request.DeliverOrderRequest;
 import uz.tabriko.dto.request.RejectOrderRequest;
+import uz.tabriko.dto.request.SendMessageRequest;
+import uz.tabriko.dto.response.OrderMessageResponse;
 import uz.tabriko.dto.response.OrderResponse;
 import uz.tabriko.dto.response.PageResponse;
 import uz.tabriko.infrastructure.payment.PaymentGateway;
@@ -35,6 +39,7 @@ public class OrderService {
     private final CreatorProfileRepository creatorProfileRepo;
     private final CreatorServiceOfferingRepository serviceOfferingRepo;
     private final UserRepository userRepo;
+    private final OrderMessageRepository orderMessageRepo;
     private final PaymentGateway paymentGateway;
     private final NotificationService notificationService;
     private final UserMapper mapper;
@@ -129,8 +134,8 @@ public class OrderService {
         if (!order.getCreator().getId().equals(creatorId)) {
             throw ApiException.forbidden("Not your order");
         }
-        if (order.getStatus() != OrderStatus.PENDING && order.getStatus() != OrderStatus.IN_PROGRESS) {
-            throw ApiException.badRequest("Order cannot be delivered in current status");
+        if (order.getStatus() != OrderStatus.IN_PROGRESS) {
+            throw ApiException.badRequest("Order must be IN_PROGRESS to deliver");
         }
 
         Delivery delivery = deliveryRepo.findByOrderId(orderId).orElse(new Delivery());
@@ -265,6 +270,119 @@ public class OrderService {
                     order.getId()
             );
         }
+    }
+
+    @Transactional
+    public OrderResponse creatorAcceptOrder(UUID creatorId, UUID orderId) {
+        Order order = orderRepo.findById(orderId)
+                .orElseThrow(() -> ApiException.notFound("Order not found"));
+        if (!order.getCreator().getId().equals(creatorId)) {
+            throw ApiException.forbidden("Not your order");
+        }
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw ApiException.badRequest("Order must be in PENDING status to accept");
+        }
+        order.setStatus(OrderStatus.IN_PROGRESS);
+        orderRepo.save(order);
+
+        notificationService.sendNotification(
+                order.getClient().getId(),
+                "Order accepted",
+                "Creator accepted your order and started working on it",
+                NotificationType.ORDER_RECEIVED,
+                order.getId()
+        );
+
+        return mapper.toOrderResponse(order, null, creatorId);
+    }
+
+    @Transactional
+    public OrderResponse creatorRejectOrder(UUID creatorId, UUID orderId, CreatorRejectOrderRequest req) {
+        Order order = orderRepo.findByIdForUpdate(orderId)
+                .orElseThrow(() -> ApiException.notFound("Order not found"));
+        if (!order.getCreator().getId().equals(creatorId)) {
+            throw ApiException.forbidden("Not your order");
+        }
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw ApiException.badRequest("Order must be in PENDING status to reject");
+        }
+        order.setStatus(OrderStatus.REJECTED);
+        if (req != null && req.getRejectionReason() != null) {
+            order.setRejectionReason(req.getRejectionReason());
+        }
+        orderRepo.save(order);
+
+        paymentGateway.refund(order.getClient().getId(), order.getPrice(), orderId);
+        recordTransaction(order.getClient(), order.getPrice(), TransactionType.REFUND, order);
+
+        notificationService.sendNotification(
+                order.getClient().getId(),
+                "Order rejected by creator",
+                "Creator rejected your order",
+                NotificationType.ORDER_REJECTED,
+                order.getId()
+        );
+
+        return mapper.toOrderResponse(order, null, creatorId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderMessageResponse> getOrderMessages(UUID userId, UUID orderId) {
+        Order order = orderRepo.findById(orderId)
+                .orElseThrow(() -> ApiException.notFound("Order not found"));
+        boolean isParticipant = order.getClient().getId().equals(userId) || order.getCreator().getId().equals(userId);
+        if (!isParticipant) {
+            throw ApiException.forbidden("Not your order");
+        }
+        return orderMessageRepo.findByOrderOrderByCreatedAtAsc(order).stream()
+                .map(this::toMessageResponse)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    @Transactional
+    public OrderMessageResponse sendOrderMessage(UUID userId, UUID orderId, SendMessageRequest req) {
+        Order order = orderRepo.findById(orderId)
+                .orElseThrow(() -> ApiException.notFound("Order not found"));
+        boolean isClient = order.getClient().getId().equals(userId);
+        boolean isCreator = order.getCreator().getId().equals(userId);
+        if (!isClient && !isCreator) {
+            throw ApiException.forbidden("Not your order");
+        }
+
+        OrderStatus status = order.getStatus();
+        if (status == OrderStatus.PENDING || status == OrderStatus.REJECTED || status == OrderStatus.REFUNDED) {
+            throw ApiException.badRequest("Chat is not available in current order status");
+        }
+
+        uz.tabriko.domain.enums.MessageAuthor author =
+                isClient ? uz.tabriko.domain.enums.MessageAuthor.CLIENT
+                         : uz.tabriko.domain.enums.MessageAuthor.CREATOR;
+
+        OrderMessage message = new OrderMessage();
+        message.setOrder(order);
+        message.setAuthor(author);
+        message.setText(req.getText());
+        orderMessageRepo.save(message);
+
+        UUID recipientId = isClient ? order.getCreator().getId() : order.getClient().getId();
+        notificationService.sendNotification(
+                recipientId,
+                "New message",
+                req.getText().length() > 50 ? req.getText().substring(0, 50) + "..." : req.getText(),
+                NotificationType.ORDER_MESSAGE,
+                orderId
+        );
+
+        return toMessageResponse(message);
+    }
+
+    private OrderMessageResponse toMessageResponse(OrderMessage msg) {
+        OrderMessageResponse resp = new OrderMessageResponse();
+        resp.setId(msg.getId());
+        resp.setAuthor(msg.getAuthor());
+        resp.setText(msg.getText());
+        resp.setCreatedAt(msg.getCreatedAt());
+        return resp;
     }
 
     @Transactional
