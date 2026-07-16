@@ -53,6 +53,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Public endpoints
                 .requestMatchers(
+                    "/api/v1/ping",
                     "/api/v1/auth/**",
                     "/api/v1/applications/**",
                     "/api/v1/categories/**",

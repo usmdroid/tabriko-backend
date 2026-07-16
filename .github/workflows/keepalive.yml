@@ -1,0 +1,21 @@
+name: keep-alive
+
+# Pings the tiny /api/v1/ping endpoint so the free-tier Render instance does not
+# spin down during active hours (it sleeps after ~15 min idle → ~50s cold start).
+#
+# Window: 09:00–~23:00 Asia/Tashkent. GitHub Actions cron is UTC-only and
+# Tashkent is UTC+5, so 09:00–22:50 local == 04:00–17:50 UTC.
+# Adjust the hour range below if the app's active hours change.
+on:
+  schedule:
+    - cron: "*/10 4-17 * * *"
+  workflow_dispatch: {}   # lets you run it manually from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend
+        run: |
+          curl -fsS --max-time 90 --retry 2 --retry-delay 10 \
+            https://tabriko-backend.onrender.com/api/v1/ping
