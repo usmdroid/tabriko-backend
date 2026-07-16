@@ -10,6 +10,7 @@ import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.*;
 import uz.tabriko.domain.enums.*;
 import uz.tabriko.domain.entity.OrderMessage;
+import uz.tabriko.domain.entity.CreatorViolation;
 import uz.tabriko.dto.request.CreateOrderRequest;
 import uz.tabriko.dto.request.CreatorRejectOrderRequest;
 import uz.tabriko.dto.request.DeliverOrderRequest;
@@ -20,6 +21,7 @@ import uz.tabriko.dto.response.OrderResponse;
 import uz.tabriko.dto.response.PageResponse;
 import uz.tabriko.infrastructure.payment.PaymentGateway;
 import uz.tabriko.repository.*;
+import uz.tabriko.repository.CreatorViolationRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -40,6 +42,9 @@ public class OrderService {
     private final CreatorServiceOfferingRepository serviceOfferingRepo;
     private final UserRepository userRepo;
     private final OrderMessageRepository orderMessageRepo;
+    private final CreatorViolationRepository violationRepo;
+    private final RatingService ratingService;
+    private final ReviewRepository reviewRepo;
     private final PaymentGateway paymentGateway;
     private final NotificationService notificationService;
     private final UserMapper mapper;
@@ -118,7 +123,13 @@ public class OrderService {
         boolean isOwner = order.getClient().getId().equals(userId) || order.getCreator().getId().equals(userId);
         if (!isOwner) throw ApiException.forbidden("Not your order");
         Delivery delivery = deliveryRepo.findByOrderId(orderId).orElse(null);
-        return mapper.toOrderResponse(order, delivery, userId);
+        OrderResponse response = mapper.toOrderResponse(order, delivery, userId);
+        reviewRepo.findByOrderId(orderId).ifPresent(review -> {
+            response.setReviewed(true);
+            response.setReviewStars(review.getStars());
+            response.setReviewComment(review.getComment());
+        });
+        return response;
     }
 
     @Transactional
@@ -258,10 +269,24 @@ public class OrderService {
         List<Order> overdue = new java.util.ArrayList<>(orderRepo.findOverdueOrders(OrderStatus.PENDING, Instant.now()));
         overdue.addAll(orderRepo.findOverdueOrders(OrderStatus.IN_PROGRESS, Instant.now()));
         for (Order order : overdue) {
+            OrderStatus originalStatus = order.getStatus();
             order.setStatus(OrderStatus.REFUNDED);
             orderRepo.save(order);
             paymentGateway.refund(order.getClient().getId(), order.getPrice(), order.getId());
             recordTransaction(order.getClient(), order.getPrice(), TransactionType.REFUND, order);
+
+            if (!violationRepo.existsByOrderId(order.getId())) {
+                ViolationType vType = originalStatus == OrderStatus.IN_PROGRESS
+                        ? ViolationType.DELIVERY_FAILURE : ViolationType.NO_RESPONSE;
+                CreatorViolation v = new CreatorViolation();
+                v.setCreatorId(order.getCreator().getId());
+                v.setOrderId(order.getId());
+                v.setType(vType);
+                v.setSeverity(vType.getSeverity());
+                violationRepo.save(v);
+                ratingService.recompute(order.getCreator().getId());
+            }
+
             notificationService.sendNotification(
                     order.getClient().getId(),
                     "Order refunded",
@@ -314,6 +339,16 @@ public class OrderService {
 
         paymentGateway.refund(order.getClient().getId(), order.getPrice(), orderId);
         recordTransaction(order.getClient(), order.getPrice(), TransactionType.REFUND, order);
+
+        if (!violationRepo.existsByOrderId(order.getId())) {
+            CreatorViolation v = new CreatorViolation();
+            v.setCreatorId(order.getCreator().getId());
+            v.setOrderId(order.getId());
+            v.setType(ViolationType.REJECTION);
+            v.setSeverity(ViolationType.REJECTION.getSeverity());
+            violationRepo.save(v);
+            ratingService.recompute(order.getCreator().getId());
+        }
 
         notificationService.sendNotification(
                 order.getClient().getId(),

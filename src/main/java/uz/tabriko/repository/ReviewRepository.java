@@ -20,5 +20,8 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     @Query("SELECT AVG(r.stars) FROM Review r WHERE r.creator.id = :creatorId")
     Double calculateAvgRating(UUID creatorId);
 
+    @Query("SELECT COALESCE(SUM(r.stars), 0) FROM Review r WHERE r.creator.id = :creatorId")
+    long sumStarsByCreatorId(UUID creatorId);
+
     long countByCreatorId(UUID creatorId);
 }

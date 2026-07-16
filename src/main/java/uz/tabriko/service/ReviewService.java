@@ -5,21 +5,16 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
-import uz.tabriko.domain.entity.CreatorProfile;
 import uz.tabriko.domain.entity.Order;
 import uz.tabriko.domain.entity.Review;
-import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.enums.NotificationType;
 import uz.tabriko.domain.enums.OrderStatus;
 import uz.tabriko.dto.request.CreateReviewRequest;
 import uz.tabriko.dto.response.PageResponse;
 import uz.tabriko.dto.response.ReviewResponse;
-import uz.tabriko.repository.CreatorProfileRepository;
 import uz.tabriko.repository.OrderRepository;
 import uz.tabriko.repository.ReviewRepository;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.UUID;
 
 @Service
@@ -28,7 +23,7 @@ public class ReviewService {
 
     private final ReviewRepository reviewRepo;
     private final OrderRepository orderRepo;
-    private final CreatorProfileRepository creatorProfileRepo;
+    private final RatingService ratingService;
     private final NotificationService notificationService;
     private final UserMapper mapper;
 
@@ -54,7 +49,7 @@ public class ReviewService {
         review.setComment(req.getComment());
         reviewRepo.save(review);
 
-        updateCreatorRating(order.getCreator().getId());
+        ratingService.recompute(order.getCreator().getId());
 
         notificationService.sendNotification(
                 order.getCreator().getId(),
@@ -72,15 +67,5 @@ public class ReviewService {
                 reviewRepo.findByCreatorIdOrderByCreatedAtDesc(creatorId, PageRequest.of(page, size)),
                 mapper::toReviewResponse
         );
-    }
-
-    private void updateCreatorRating(UUID creatorId) {
-        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId).orElse(null);
-        if (cp == null) return;
-        Double avg = reviewRepo.calculateAvgRating(creatorId);
-        long count = reviewRepo.countByCreatorId(creatorId);
-        cp.setAvgRating(avg != null ? BigDecimal.valueOf(avg).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO);
-        cp.setRatingCount((int) count);
-        creatorProfileRepo.save(cp);
     }
 }

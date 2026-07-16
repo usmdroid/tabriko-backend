@@ -8,17 +8,14 @@ import org.mockito.Mock;
 import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uz.tabriko.common.exception.ApiException;
-import uz.tabriko.domain.entity.CreatorProfile;
 import uz.tabriko.domain.entity.Order;
 import uz.tabriko.domain.entity.Review;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.enums.OrderStatus;
 import uz.tabriko.dto.request.CreateReviewRequest;
-import uz.tabriko.repository.CreatorProfileRepository;
 import uz.tabriko.repository.OrderRepository;
 import uz.tabriko.repository.ReviewRepository;
 
-import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -32,7 +29,7 @@ class ReviewServiceTest {
 
     @Mock ReviewRepository reviewRepo;
     @Mock OrderRepository orderRepo;
-    @Mock CreatorProfileRepository creatorProfileRepo;
+    @Mock RatingService ratingService;
     @Mock NotificationService notificationService;
     @Mock UserMapper mapper;
 
@@ -103,15 +100,9 @@ class ReviewServiceTest {
     }
 
     @Test
-    void createReview_success_savesReviewUpdatesRatingAndNotifiesCreator() {
+    void createReview_success_savesReviewCallsRatingAndNotifiesCreator() {
         when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
         when(reviewRepo.findByOrderId(orderId)).thenReturn(Optional.empty());
-
-        CreatorProfile profile = new CreatorProfile();
-        profile.setUser(creator);
-        when(creatorProfileRepo.findByUserId(creator.getId())).thenReturn(Optional.of(profile));
-        when(reviewRepo.calculateAvgRating(creator.getId())).thenReturn(4.5);
-        when(reviewRepo.countByCreatorId(creator.getId())).thenReturn(2L);
 
         reviewService.createReview(clientId, orderId, request(5));
 
@@ -121,43 +112,19 @@ class ReviewServiceTest {
         assertThat(reviewCaptor.getValue().getClient()).isEqualTo(client);
         assertThat(reviewCaptor.getValue().getCreator()).isEqualTo(creator);
 
-        ArgumentCaptor<CreatorProfile> profileCaptor = ArgumentCaptor.forClass(CreatorProfile.class);
-        verify(creatorProfileRepo).save(profileCaptor.capture());
-        assertThat(profileCaptor.getValue().getAvgRating()).isEqualByComparingTo("4.50");
-        assertThat(profileCaptor.getValue().getRatingCount()).isEqualTo(2);
+        verify(ratingService).recompute(creator.getId());
 
         verify(notificationService).sendNotification(
                 eq(creator.getId()), any(), any(), eq(uz.tabriko.domain.enums.NotificationType.REVIEW_RECEIVED));
     }
 
-
     @Test
-    void createReview_noRatingsYet_avgRatingDefaultsToZero() {
+    void createReview_success_delegatesRatingRecomputeToRatingService() {
         when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
         when(reviewRepo.findByOrderId(orderId)).thenReturn(Optional.empty());
 
-        CreatorProfile profile = new CreatorProfile();
-        profile.setUser(creator);
-        when(creatorProfileRepo.findByUserId(creator.getId())).thenReturn(Optional.of(profile));
-        when(reviewRepo.calculateAvgRating(creator.getId())).thenReturn(null);
-        when(reviewRepo.countByCreatorId(creator.getId())).thenReturn(0L);
+        reviewService.createReview(clientId, orderId, request(3));
 
-        reviewService.createReview(clientId, orderId, request(5));
-
-        ArgumentCaptor<CreatorProfile> profileCaptor = ArgumentCaptor.forClass(CreatorProfile.class);
-        verify(creatorProfileRepo).save(profileCaptor.capture());
-        assertThat(profileCaptor.getValue().getAvgRating()).isEqualByComparingTo(BigDecimal.ZERO);
-    }
-
-    @Test
-    void createReview_creatorProfileMissing_doesNotThrowOrSaveProfile() {
-        when(orderRepo.findById(orderId)).thenReturn(Optional.of(order));
-        when(reviewRepo.findByOrderId(orderId)).thenReturn(Optional.empty());
-        when(creatorProfileRepo.findByUserId(creator.getId())).thenReturn(Optional.empty());
-
-        reviewService.createReview(clientId, orderId, request(5));
-
-        verify(reviewRepo).save(any());
-        verify(creatorProfileRepo, never()).save(any());
+        verify(ratingService).recompute(creator.getId());
     }
 }

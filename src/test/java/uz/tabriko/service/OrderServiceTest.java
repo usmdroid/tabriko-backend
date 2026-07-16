@@ -23,6 +23,7 @@ import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.infrastructure.payment.PaymentGateway;
 import uz.tabriko.infrastructure.payment.PaymentResult;
 import uz.tabriko.repository.*;
+import uz.tabriko.repository.CreatorViolationRepository;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -44,6 +45,8 @@ class OrderServiceTest {
     @Mock CreatorServiceOfferingRepository serviceOfferingRepo;
     @Mock UserRepository userRepo;
     @Mock OrderMessageRepository orderMessageRepo;
+    @Mock CreatorViolationRepository violationRepo;
+    @Mock RatingService ratingService;
     @Mock PaymentGateway paymentGateway;
     @Mock MediaStorageService mediaStorage;
     @Mock NotificationService notificationService;

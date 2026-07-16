@@ -30,4 +30,7 @@ public class OrderResponse {
     private Instant createdAt;
     private String rejectionReason;
     private DeliveryResponse delivery;
+    private boolean reviewed;
+    private Integer reviewStars;
+    private String reviewComment;
 }
