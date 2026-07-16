@@ -287,6 +287,22 @@ public class CreatorService {
         return getSelfProfile(creatorId);
     }
 
+    @Transactional
+    public CreatorSelfProfileResponse uploadOwnBanner(UUID creatorId, MultipartFile file) {
+        if (file == null || file.isEmpty()) throw ApiException.badRequest("Banner file is required");
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/"))
+            throw ApiException.badRequest("Only image files are allowed");
+        if (file.getSize() > 5L * 1024 * 1024)
+            throw ApiException.badRequest("File size must not exceed 5 MB");
+        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
+                .orElseThrow(() -> ApiException.notFound("Creator profile not found"));
+        String url = mediaStorage.store(file, "banners");
+        cp.setBannerUrl(url);
+        creatorProfileRepo.save(cp);
+        return getSelfProfile(creatorId);
+    }
+
     // --- Per-service pricing + discounts (creator_service CRUD) ---
 
     @Transactional(readOnly = true)

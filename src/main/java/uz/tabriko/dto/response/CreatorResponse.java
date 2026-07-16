@@ -17,6 +17,7 @@ public class CreatorResponse {
     private String name;
     private String phone;
     private String avatarUrl;
+    private String bannerUrl;
     private String bio;
     private CategoryResponse category;
     private BigDecimal avgRating;

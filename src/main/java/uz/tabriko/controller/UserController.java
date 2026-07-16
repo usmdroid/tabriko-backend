@@ -4,9 +4,11 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.dto.request.ConfirmPhoneChangeRequest;
 import uz.tabriko.dto.request.RegisterFcmTokenRequest;
@@ -37,6 +39,14 @@ public class UserController {
             @Valid @RequestBody UpdateProfileRequest req
     ) {
         return ResponseEntity.ok(BaseResponse.ok(userService.updateMe(principal.getUserId(), req)));
+    }
+
+    @PostMapping(value = "/me/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload or replace own avatar")
+    public ResponseEntity<BaseResponse<UserResponse>> uploadAvatar(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(BaseResponse.ok(userService.uploadOwnAvatar(principal.getUserId(), file)));
     }
 
     @PostMapping("/me/phone/otp")

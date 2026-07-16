@@ -273,6 +273,8 @@ public class ApplicationService {
         app.setStatus(ApplicationStatus.UNDER_REVIEW);
         app.setUpdatedAt(Instant.now());
         applicationRepo.save(app);
+        telegramBotService.notifyApplicant(app.getPhone(),
+                "[Avtomatik xabar, javob bermang]\nArizangiz ko'rib chiqilmoqda");
     }
 
     @Transactional
@@ -306,6 +308,11 @@ public class ApplicationService {
         app.setDecisionReason(req.getMessage());
         app.setUpdatedAt(Instant.now());
         applicationRepo.save(app);
+        String msg = "[Avtomatik xabar, javob bermang]\nAfsuski, arizangiz rad etildi";
+        if (req.getMessage() != null && !req.getMessage().isBlank()) {
+            msg += "\nSabab: " + req.getMessage();
+        }
+        telegramBotService.notifyApplicant(app.getPhone(), msg);
     }
 
     @Transactional
@@ -385,6 +392,8 @@ public class ApplicationService {
         app.setReviewedBy(admin);
         app.setUpdatedAt(Instant.now());
         applicationRepo.save(app);
+        telegramBotService.notifyApplicant(app.getPhone(),
+                "[Avtomatik xabar, javob bermang]\nTabriklaymiz! Arizangiz tasdiqlandi");
     }
 
     // --- Helpers ---

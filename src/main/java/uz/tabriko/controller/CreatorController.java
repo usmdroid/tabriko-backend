@@ -129,6 +129,14 @@ public class CreatorController {
         return ResponseEntity.ok(BaseResponse.ok(creatorService.uploadOwnAvatar(principal.getUserId(), file)));
     }
 
+    @PostMapping(value = "/banner", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload or replace own banner image")
+    public ResponseEntity<BaseResponse<CreatorSelfProfileResponse>> uploadBanner(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(BaseResponse.ok(creatorService.uploadOwnBanner(principal.getUserId(), file)));
+    }
+
     @GetMapping("/portfolio")
     @Operation(summary = "Get own portfolio items")
     public ResponseEntity<BaseResponse<List<PortfolioItemResponse>>> getPortfolio(

@@ -15,6 +15,7 @@ public class CreatorSelfProfileResponse {
     private UUID id;
     private String name;
     private String avatarUrl;
+    private String bannerUrl;
     private String bio;
     private CategoryResponse category;
     private BigDecimal avgRating;

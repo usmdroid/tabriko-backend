@@ -58,6 +58,9 @@ public class CreatorProfile {
     @Column(name = "avatar_url", length = 500)
     private String avatarUrl;
 
+    @Column(name = "banner_url", length = 500)
+    private String bannerUrl;
+
     @Column(name = "accepting", nullable = false)
     private boolean accepting = true;
 

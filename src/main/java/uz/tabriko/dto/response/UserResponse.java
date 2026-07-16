@@ -19,4 +19,5 @@ public class UserResponse {
     private LocalDate birthDate;
     private Instant createdAt;
     private String accountNumber;
+    private String avatar;
 }

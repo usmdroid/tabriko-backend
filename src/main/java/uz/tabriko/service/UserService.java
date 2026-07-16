@@ -3,6 +3,7 @@ package uz.tabriko.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
@@ -12,6 +13,7 @@ import uz.tabriko.domain.enums.Platform;
 import uz.tabriko.dto.request.UpdateProfileRequest;
 import uz.tabriko.dto.response.UserResponse;
 import uz.tabriko.infrastructure.firebase.OtpService;
+import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.repository.PlatformSettingsRepository;
 import uz.tabriko.repository.UserDeviceRepository;
 import uz.tabriko.repository.UserRepository;
@@ -28,6 +30,7 @@ public class UserService {
     private final PlatformSettingsRepository settingsRepo;
     private final UserMapper userMapper;
     private final OtpService otpService;
+    private final MediaStorageService mediaStorage;
 
     public UserResponse getMe(UUID userId) {
         User user = userRepo.findById(userId)
@@ -118,6 +121,19 @@ public class UserService {
 
         user.setFcmToken(token);
         userRepo.save(user);
+    }
+
+    @Transactional
+    public UserResponse uploadOwnAvatar(UUID userId, MultipartFile file) {
+        if (file == null || file.isEmpty()) throw ApiException.badRequest("Avatar file is required");
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) throw ApiException.badRequest("Only image files are allowed");
+        if (file.getSize() > 5L * 1024 * 1024) throw ApiException.badRequest("File size must not exceed 5 MB");
+        User user = getOrThrow(userId);
+        String url = mediaStorage.store(file, "avatars");
+        user.setAvatarUrl(url);
+        userRepo.save(user);
+        return userMapper.toResponse(user);
     }
 
     public User getOrThrow(UUID userId) {

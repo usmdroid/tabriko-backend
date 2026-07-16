@@ -7,9 +7,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.CreatorApplication;
+import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.entity.VerifiedPhoneEntity;
 import uz.tabriko.domain.enums.ApplicationActivityType;
 import uz.tabriko.domain.enums.ApplicationSocialType;
+import uz.tabriko.domain.enums.ApplicationStatus;
+import uz.tabriko.dto.request.AdminApplicationDecisionRequest;
 import uz.tabriko.dto.request.SubmitApplicationRequest;
 import uz.tabriko.dto.request.VerifyPhoneRequest;
 import uz.tabriko.dto.response.ApplicationSubmitResponse;
@@ -22,6 +25,7 @@ import uz.tabriko.repository.CreatorApplicationRepository;
 import uz.tabriko.repository.CreatorProfileRepository;
 import uz.tabriko.repository.UserRepository;
 import uz.tabriko.repository.VerifiedPhoneRepository;
+import uz.tabriko.security.UserPrincipal;
 import uz.tabriko.telegram.repository.TelegramVerificationRepository;
 import uz.tabriko.telegram.service.TelegramBotService;
 
@@ -29,15 +33,19 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -223,5 +231,77 @@ class ApplicationServiceTest {
 
         org.mockito.Mockito.verify(applicationRepo, org.mockito.Mockito.never())
                 .save(org.mockito.ArgumentMatchers.any(CreatorApplication.class));
+    }
+
+    // ===== Telegram notifications on status transitions =====
+
+    private CreatorApplication makeApp(String phone, ApplicationStatus status) {
+        CreatorApplication app = new CreatorApplication();
+        app.setPhone(phone);
+        app.setStatus(status);
+        return app;
+    }
+
+    @Test
+    void markUnderReview_notifiesApplicantWithUnderReviewMessage() {
+        String phone = "+998901111111";
+        UUID id = UUID.randomUUID();
+        when(applicationRepo.findById(id)).thenReturn(Optional.of(makeApp(phone, ApplicationStatus.SUBMITTED)));
+        when(applicationRepo.save(any(CreatorApplication.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        applicationService.markUnderReview(id);
+
+        verify(telegramBotService).notifyApplicant(eq(phone), contains("ko'rib chiqilmoqda"));
+    }
+
+    @Test
+    void approve_notifiesApplicantWithApprovedMessage() {
+        String phone = "+998902222222";
+        UUID id = UUID.randomUUID();
+        when(applicationRepo.findById(id)).thenReturn(Optional.of(makeApp(phone, ApplicationStatus.SUBMITTED)));
+        when(applicationRepo.save(any(CreatorApplication.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UUID adminId = UUID.randomUUID();
+        User admin = new User();
+        admin.setId(adminId);
+        admin.setPhone("+998900000000");
+        UserPrincipal principal = new UserPrincipal(adminId, "+998900000000", null);
+        when(userRepo.findByPhone(phone)).thenReturn(Optional.of(admin));
+        when(userRepo.findById(adminId)).thenReturn(Optional.of(admin));
+        when(creatorProfileRepo.existsById(any())).thenReturn(true);
+
+        applicationService.approve(id, principal);
+
+        verify(telegramBotService).notifyApplicant(eq(phone), contains("tasdiqlandi"));
+    }
+
+    @Test
+    void reject_notifiesApplicantWithRejectedMessageAndReason() {
+        String phone = "+998903333333";
+        UUID id = UUID.randomUUID();
+        when(applicationRepo.findById(id)).thenReturn(Optional.of(makeApp(phone, ApplicationStatus.SUBMITTED)));
+        when(applicationRepo.save(any(CreatorApplication.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AdminApplicationDecisionRequest req = new AdminApplicationDecisionRequest();
+        req.setMessage("Taqdim etilgan hujjatlar to'liq emas");
+
+        applicationService.reject(id, req);
+
+        verify(telegramBotService).notifyApplicant(eq(phone), contains("rad etildi"));
+        verify(telegramBotService).notifyApplicant(eq(phone), contains("Sabab:"));
+    }
+
+    @Test
+    void reject_withNullPhone_doesNotThrow() {
+        UUID id = UUID.randomUUID();
+        when(applicationRepo.findById(id)).thenReturn(Optional.of(makeApp(null, ApplicationStatus.SUBMITTED)));
+        when(applicationRepo.save(any(CreatorApplication.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AdminApplicationDecisionRequest req = new AdminApplicationDecisionRequest();
+        req.setMessage("some reason");
+
+        // notifyApplicant on TelegramBotService handles null phone — ApplicationService must not NPE
+        org.assertj.core.api.Assertions.assertThatCode(() -> applicationService.reject(id, req))
+                .doesNotThrowAnyException();
     }
 }

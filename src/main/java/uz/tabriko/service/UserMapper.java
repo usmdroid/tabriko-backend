@@ -34,6 +34,7 @@ public class UserMapper {
         r.setBirthDate(user.getBirthDate());
         r.setCreatedAt(user.getCreatedAt());
         r.setAccountNumber(user.getAccountNumber());
+        r.setAvatar(user.getAvatarUrl());
         return r;
     }
 
@@ -69,6 +70,7 @@ public class UserMapper {
         r.setId(cp.getUserId());
         r.setName(cp.getUser().getName());
         r.setAvatarUrl(cp.getAvatarUrl());
+        r.setBannerUrl(cp.getBannerUrl());
         r.setBio(cp.getBio());
         if (cp.getCategory() != null) {
             r.setCategory(toCategoryResponse(cp.getCategory()));
@@ -100,6 +102,7 @@ public class UserMapper {
         r.setId(cp.getUserId());
         r.setName(cp.getUser().getName());
         r.setAvatarUrl(cp.getAvatarUrl());
+        r.setBannerUrl(cp.getBannerUrl());
         r.setBio(cp.getBio());
         if (cp.getCategory() != null) {
             r.setCategory(toCategoryResponse(cp.getCategory()));
