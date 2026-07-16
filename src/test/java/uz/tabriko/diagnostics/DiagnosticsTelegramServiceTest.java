@@ -8,12 +8,16 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 import uz.tabriko.domain.entity.CrashReport;
+import uz.tabriko.telegram.repository.TelegramAlertSubscriberRepository;
 import uz.tabriko.telegram.service.DiagnosticsTelegramService;
 
+import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.ExpectedCount.once;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestToUriTemplate;
@@ -22,22 +26,28 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 class DiagnosticsTelegramServiceTest {
 
-    private static final String BOT_TOKEN = "test-bot-token";
-    private static final String CHAT_ID = "-100123456789";
+    private static final String BOT_TOKEN = "test-alert-bot-token";
+    // No collected subscribers in the test → falls back to this single chat id.
+    private static final String FALLBACK_CHAT_ID = "-100123456789";
     private static final String TELEGRAM_URL = "https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage";
 
     private RestTemplate restTemplate;
     private MockRestServiceServer server;
+    private TelegramAlertSubscriberRepository subscriberRepo;
     private DiagnosticsTelegramService service;
 
     @BeforeEach
     void setUp() {
         restTemplate = new RestTemplate();
         server = MockRestServiceServer.bindTo(restTemplate).build();
-        service = new DiagnosticsTelegramService(restTemplate);
-        ReflectionTestUtils.setField(service, "botToken", BOT_TOKEN);
-        ReflectionTestUtils.setField(service, "alertChatId", CHAT_ID);
+        subscriberRepo = mock(TelegramAlertSubscriberRepository.class);
+        when(subscriberRepo.findAll()).thenReturn(List.of());
+        service = new DiagnosticsTelegramService(restTemplate, subscriberRepo);
+        ReflectionTestUtils.setField(service, "alertBotToken", BOT_TOKEN);
+        ReflectionTestUtils.setField(service, "fallbackChatId", FALLBACK_CHAT_ID);
         ReflectionTestUtils.setField(service, "alertsEnabled", true);
+        // Run sends synchronously so verify() is deterministic (no async race).
+        ReflectionTestUtils.setField(service, "sendExecutor", (Executor) Runnable::run);
     }
 
     private CrashReport buildReport(String message, String stackTrace) {
@@ -67,7 +77,7 @@ class DiagnosticsTelegramServiceTest {
 
     @Test
     void sendAlert_withMissingToken_doesNotCallTelegram() throws Exception {
-        ReflectionTestUtils.setField(service, "botToken", "");
+        ReflectionTestUtils.setField(service, "alertBotToken", "");
 
         // No server expectation — any call would fail the test
         service.sendAlert(buildReport("App crashed", null), UUID.randomUUID());

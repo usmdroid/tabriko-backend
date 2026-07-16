@@ -1,22 +1,37 @@
 package uz.tabriko.telegram.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import uz.tabriko.domain.entity.CrashReport;
+import uz.tabriko.telegram.entity.TelegramAlertSubscriber;
+import uz.tabriko.telegram.repository.TelegramAlertSubscriberRepository;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Forwards critical crash reports to a dedicated Telegram ALERT bot
+ * (TELEGRAM_ALERT_BOT_TOKEN — separate from the Verify bot's TELEGRAM_BOT_TOKEN).
+ * Recipients are every chat that has started the alert bot: chat ids are
+ * collected by polling the bot's getUpdates, and each alert is broadcast to all
+ * of them. A single-chat fallback (TELEGRAM_ALERT_CHAT_ID) is used only while
+ * no subscribers have been collected yet.
+ */
 @Slf4j
 @Service
 public class DiagnosticsTelegramService {
@@ -27,12 +42,13 @@ public class DiagnosticsTelegramService {
     private static final int MAX_MESSAGE_LEN = 4096;
 
     private final RestTemplate restTemplate;
+    private final TelegramAlertSubscriberRepository subscriberRepo;
 
-    @Value("${app.telegram.bot-token:}")
-    private String botToken;
+    @Value("${app.telegram.alert.bot-token:}")
+    private String alertBotToken;
 
     @Value("${app.telegram.alert.chat-id:}")
-    private String alertChatId;
+    private String fallbackChatId;
 
     @Value("${app.telegram.alerts.enabled:true}")
     private boolean alertsEnabled;
@@ -41,12 +57,23 @@ public class DiagnosticsTelegramService {
     private final AtomicInteger rateCounter = new AtomicInteger(0);
     private final AtomicLong rateWindowStart = new AtomicLong(System.currentTimeMillis());
 
-    public DiagnosticsTelegramService(RestTemplate restTemplate) {
+    // getUpdates cursor (in-memory; on restart it resets to 0 and Telegram
+    // re-delivers recent unconfirmed updates — upserts are idempotent by chat id).
+    private final AtomicLong updateOffset = new AtomicLong(0);
+
+    // Fire-and-forget send executor; overridden with a synchronous one in tests.
+    private Executor sendExecutor = ForkJoinPool.commonPool();
+
+    public DiagnosticsTelegramService(RestTemplate restTemplate,
+                                      TelegramAlertSubscriberRepository subscriberRepo) {
         this.restTemplate = restTemplate;
+        this.subscriberRepo = subscriberRepo;
     }
 
+    // ── Alert broadcast ────────────────────────────────────────────────────────
+
     public void sendAlert(CrashReport report, UUID userId) {
-        if (!alertsEnabled || botToken == null || botToken.isBlank() || alertChatId == null || alertChatId.isBlank()) {
+        if (!alertsEnabled || alertBotToken == null || alertBotToken.isBlank()) {
             return;
         }
 
@@ -70,28 +97,86 @@ public class DiagnosticsTelegramService {
 
         dedupeCache.put(dedupeKey, now);
 
+        List<Long> recipients = resolveRecipients();
+        if (recipients.isEmpty()) {
+            log.debug("No Telegram alert subscribers yet — alert not delivered");
+            return;
+        }
+
         String text = buildMessage(report, userId);
-        CompletableFuture.runAsync(() -> doSend(text));
+        for (Long chatId : recipients) {
+            sendExecutor.execute(() -> doSend(chatId, text));
+        }
     }
 
-    private void doSend(String text) {
+    private List<Long> resolveRecipients() {
+        List<Long> ids = new ArrayList<>();
+        subscriberRepo.findAll().forEach(s -> ids.add(s.getChatId()));
+        if (ids.isEmpty() && fallbackChatId != null && !fallbackChatId.isBlank()) {
+            try {
+                ids.add(Long.parseLong(fallbackChatId.trim()));
+            } catch (NumberFormatException ignored) {
+                // fallback chat id misconfigured — skip
+            }
+        }
+        return ids;
+    }
+
+    private void doSend(long chatId, String text) {
         try {
-            String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
+            String url = "https://api.telegram.org/bot" + alertBotToken + "/sendMessage";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            Map<String, Object> body = Map.of(
-                "chat_id", alertChatId,
-                "text", text
-            );
+            Map<String, Object> body = Map.of("chat_id", chatId, "text", text);
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
             ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
             if (!response.getStatusCode().is2xxSuccessful()) {
-                log.warn("Telegram alert returned non-200 status: {}", response.getStatusCode());
+                log.warn("Telegram alert to chat {} returned {}", chatId, response.getStatusCode());
             }
         } catch (Exception e) {
-            log.warn("Failed to send Telegram alert using [TELEGRAM_BOT_TOKEN]: {}", e.getMessage());
+            log.warn("Failed to send Telegram alert (TELEGRAM_ALERT_BOT_TOKEN) to chat {}: {}",
+                chatId, e.getMessage());
         }
     }
+
+    // ── Subscriber collection (getUpdates poll) ─────────────────────────────────
+
+    @Scheduled(fixedDelay = 60_000L)
+    public void pollSubscribers() {
+        if (alertBotToken == null || alertBotToken.isBlank()) {
+            return;
+        }
+        try {
+            String url = "https://api.telegram.org/bot" + alertBotToken
+                + "/getUpdates?timeout=0&allowed_updates=%5B%22message%22%5D&offset="
+                + updateOffset.get();
+            JsonNode resp = restTemplate.getForObject(url, JsonNode.class);
+            if (resp == null || !resp.path("ok").asBoolean(false)) {
+                return;
+            }
+            for (JsonNode upd : resp.path("result")) {
+                updateOffset.set(upd.path("update_id").asLong() + 1);
+                JsonNode chat = upd.path("message").path("chat");
+                if (!chat.hasNonNull("id")) {
+                    continue;
+                }
+                long chatId = chat.get("id").asLong();
+                if (!subscriberRepo.existsById(chatId)) {
+                    TelegramAlertSubscriber sub = new TelegramAlertSubscriber();
+                    sub.setChatId(chatId);
+                    sub.setUsername(chat.hasNonNull("username") ? chat.get("username").asText() : null);
+                    sub.setFirstName(chat.hasNonNull("first_name") ? chat.get("first_name").asText() : null);
+                    subscriberRepo.save(sub);
+                    log.info("New Telegram alert subscriber: chat {}", chatId);
+                }
+            }
+        } catch (Exception e) {
+            // Non-fatal: if a webhook is set on the alert bot, getUpdates 409s — log only.
+            log.warn("Telegram alert getUpdates poll failed: {}", e.getMessage());
+        }
+    }
+
+    // ── Message formatting ──────────────────────────────────────────────────────
 
     private String buildMessage(CrashReport report, UUID userId) {
         String userStr = userId != null ? userId.toString() : "anon";
