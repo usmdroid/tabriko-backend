@@ -23,5 +23,11 @@ public class WebConfig implements WebMvcConfigurer {
                 .addResourceLocations("file:" + uploadDir + "/kyc/");
         registry.addResourceHandler("/files/applications/**")
                 .addResourceLocations("file:" + uploadDir + "/applications/");
+        // Public profile imagery (creator avatar/banner, user avatar) — served statically
+        // when the LOCAL storage provider is active; S3 provider serves these from the bucket.
+        registry.addResourceHandler("/files/avatars/**")
+                .addResourceLocations("file:" + uploadDir + "/avatars/");
+        registry.addResourceHandler("/files/banners/**")
+                .addResourceLocations("file:" + uploadDir + "/banners/");
     }
 }

@@ -71,7 +71,9 @@ public class SecurityConfig {
                     // /files/media/** require authentication + ownership, unlike the folders below.
                     "/files/portfolio/**",
                     "/files/kyc/**",
-                    "/files/applications/**"
+                    "/files/applications/**",
+                    "/files/avatars/**",
+                    "/files/banners/**"
                 ).permitAll()
                 // Admin only
                 .requestMatchers("/api/v1/admin/**", "/api/v1/moderation/**")
