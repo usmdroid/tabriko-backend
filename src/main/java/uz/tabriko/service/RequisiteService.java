@@ -135,6 +135,25 @@ public class RequisiteService {
             cr.setSource(RequisiteSource.CUSTOM);
         }
 
+        if (req.getPrice() != null) {
+            cr.setPrice(req.getPrice());
+        }
+        return toCreatorRequisiteResponse(creatorRequisiteRepo.save(cr));
+    }
+
+    @Transactional
+    public CreatorRequisiteResponse patchCreatorRequisite(UUID creatorId, Long requisiteId, PatchRequisiteRequest req) {
+        CreatorRequisite cr = creatorRequisiteRepo.findByIdAndCreatorUserId(requisiteId, creatorId)
+                .orElseThrow(() -> ApiException.forbidden("Requisite not found or not owned by you"));
+        if (req.getName() != null && !req.getName().isBlank()) {
+            cr.setName(req.getName().trim());
+        }
+        if (req.getEmoji() != null) {
+            cr.setEmoji(req.getEmoji().isBlank() ? null : req.getEmoji());
+        }
+        if (req.getPrice() != null) {
+            cr.setPrice(req.getPrice());
+        }
         return toCreatorRequisiteResponse(creatorRequisiteRepo.save(cr));
     }
 
@@ -179,6 +198,7 @@ public class RequisiteService {
         resp.setEmoji(cr.getEmoji());
         resp.setSource(cr.getSource());
         resp.setServiceType(cr.getServiceType());
+        resp.setPrice(cr.getPrice());
         return resp;
     }
 }

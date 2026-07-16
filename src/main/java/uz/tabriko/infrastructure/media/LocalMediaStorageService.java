@@ -63,6 +63,24 @@ public class LocalMediaStorageService implements MediaStorageService {
     }
 
     @Override
+    public String publicUrl(String rawUrl) {
+        if (rawUrl == null) return null;
+        // rawUrl was stored as baseUrl + "/folder/file.ext" — already an http URL.
+        // Strip the baseUrl prefix and re-prepend to normalise in case baseUrl changed.
+        if (rawUrl.startsWith(baseUrl)) {
+            return baseUrl + rawUrl.substring(baseUrl.length());
+        }
+        // Fallback: strip scheme+authority and re-prefix with the configured baseUrl
+        try {
+            java.net.URI uri = java.net.URI.create(rawUrl);
+            String path = uri.getRawPath();
+            return baseUrl + "/" + path.replaceFirst("^/+", "");
+        } catch (Exception e) {
+            return rawUrl;
+        }
+    }
+
+    @Override
     public InputStream read(String mediaUrl) {
         try {
             String withoutQuery = mediaUrl.replaceFirst("\\?.*$", "");

@@ -76,6 +76,12 @@ public class CatalogController {
         return ResponseEntity.ok(BaseResponse.ok(catalogService.getCreator(id)));
     }
 
+    @GetMapping("/creators/by-code/{code}")
+    @Operation(summary = "Get creator by public code")
+    public ResponseEntity<BaseResponse<?>> getCreatorByCode(@PathVariable String code) {
+        return ResponseEntity.ok(BaseResponse.ok(catalogService.getCreatorByCode(code.toLowerCase())));
+    }
+
     @GetMapping("/catalog/occasions/upcoming")
     @Operation(summary = "Upcoming occasions for the home screen carousel")
     public ResponseEntity<BaseResponse<?>> getUpcomingOccasions(

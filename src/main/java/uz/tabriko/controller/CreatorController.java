@@ -14,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.dto.request.AddCreatorRequisiteRequest;
+import uz.tabriko.dto.request.PatchRequisiteRequest;
 import uz.tabriko.dto.request.CreateCreatorServiceRequest;
 import uz.tabriko.dto.request.UpdateCreatorKycRequest;
 import uz.tabriko.dto.request.UpdateCreatorProfileRequest;
@@ -248,6 +249,17 @@ public class CreatorController {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(BaseResponse.created(requisiteService.addCreatorRequisite(principal.getUserId(), req)));
+    }
+
+    @PatchMapping("/requisites/{id}")
+    @Operation(summary = "Patch own requisite (name, emoji, price)")
+    public ResponseEntity<BaseResponse<CreatorRequisiteResponse>> patchRequisite(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable Long id,
+            @Valid @RequestBody PatchRequisiteRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(
+                requisiteService.patchCreatorRequisite(principal.getUserId(), id, req)));
     }
 
     @DeleteMapping("/requisites/{id}")

@@ -20,6 +20,10 @@ public class UserMapper {
 
     private static final long SIGNED_URL_TTL_SECONDS = 3600L;
 
+    private String publicUrl(String rawUrl) {
+        return mediaStorage != null ? mediaStorage.publicUrl(rawUrl) : rawUrl;
+    }
+
     @Autowired(required = false)
     private MediaStorageService mediaStorage;
 
@@ -34,7 +38,7 @@ public class UserMapper {
         r.setBirthDate(user.getBirthDate());
         r.setCreatedAt(user.getCreatedAt());
         r.setAccountNumber(user.getAccountNumber());
-        r.setAvatar(user.getAvatarUrl());
+        r.setAvatar(publicUrl(user.getAvatarUrl()));
         return r;
     }
 
@@ -69,8 +73,8 @@ public class UserMapper {
         CreatorResponse r = new CreatorResponse();
         r.setId(cp.getUserId());
         r.setName(cp.getUser().getName());
-        r.setAvatarUrl(cp.getAvatarUrl());
-        r.setBannerUrl(cp.getBannerUrl());
+        r.setAvatarUrl(publicUrl(cp.getAvatarUrl()));
+        r.setBannerUrl(publicUrl(cp.getBannerUrl()));
         r.setBio(cp.getBio());
         if (cp.getCategory() != null) {
             r.setCategory(toCategoryResponse(cp.getCategory()));
@@ -87,6 +91,7 @@ public class UserMapper {
         applyServicePricing(services, r::setServices, r::setPriceFrom, r::setOriginalPriceFrom, r::setOnSale);
         r.setPortfolio(portfolio.stream().map(this::toPortfolioResponse).collect(Collectors.toList()));
         r.setPhone(cp.getUser().getPhone());
+        r.setPublicCode(cp.getPublicCode());
         r.setStatus(cp.getUser().getStatus().name().toLowerCase());
         r.setCreatedAt(cp.getUser().getCreatedAt());
         return r;
@@ -101,8 +106,8 @@ public class UserMapper {
         CreatorSelfProfileResponse r = new CreatorSelfProfileResponse();
         r.setId(cp.getUserId());
         r.setName(cp.getUser().getName());
-        r.setAvatarUrl(cp.getAvatarUrl());
-        r.setBannerUrl(cp.getBannerUrl());
+        r.setAvatarUrl(publicUrl(cp.getAvatarUrl()));
+        r.setBannerUrl(publicUrl(cp.getBannerUrl()));
         r.setBio(cp.getBio());
         if (cp.getCategory() != null) {
             r.setCategory(toCategoryResponse(cp.getCategory()));
@@ -118,6 +123,7 @@ public class UserMapper {
         r.setOptions(new java.util.HashSet<>(cp.getOptions()));
         applyServicePricing(services, r::setServices, r::setPriceFrom, r::setOriginalPriceFrom, r::setOnSale);
         r.setPortfolio(portfolio.stream().map(this::toPortfolioResponse).collect(Collectors.toList()));
+        r.setPublicCode(cp.getPublicCode());
         r.setStatus(cp.getUser().getStatus().name().toLowerCase());
         r.setCreatedAt(cp.getUser().getCreatedAt());
 
@@ -250,7 +256,7 @@ public class UserMapper {
     public PortfolioItemResponse toPortfolioResponse(PortfolioItem item) {
         PortfolioItemResponse r = new PortfolioItemResponse();
         r.setId(item.getId());
-        r.setMediaUrl(item.getMediaUrl());
+        r.setMediaUrl(publicUrl(item.getMediaUrl()));
         r.setPublic(item.isPublic());
         if (item.getOrder() != null) {
             r.setOrderId(item.getOrder().getId());

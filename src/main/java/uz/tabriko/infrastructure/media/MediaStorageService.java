@@ -12,4 +12,6 @@ public interface MediaStorageService {
     String signedUrl(String mediaUrl, UUID userId, long ttlSeconds);
     // Reads the raw bytes for a stored mediaUrl (used by the authenticated download stream)
     InputStream read(String mediaUrl);
+    // Converts a raw stored URL (e.g. s3:// or localhost) to a publicly reachable http(s) URL
+    String publicUrl(String rawUrl);
 }

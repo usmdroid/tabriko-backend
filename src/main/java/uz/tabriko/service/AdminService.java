@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.common.util.PhoneUtil;
+import uz.tabriko.common.util.PublicCodeUtil;
 import uz.tabriko.domain.entity.Category;
 import uz.tabriko.domain.entity.CreatorContact;
 import uz.tabriko.domain.entity.CreatorProfile;
@@ -102,6 +103,13 @@ public class AdminService {
         cp.setTier(req.getTier() != null ? req.getTier() : uz.tabriko.domain.enums.CreatorTier.STANDARD);
         if (req.getPassportSeries() != null) cp.setPassportSeries(req.getPassportSeries());
         if (req.getPassportNumber() != null) cp.setPassportNumber(req.getPassportNumber());
+        if (cp.getPublicCode() == null) {
+            String code;
+            do {
+                code = PublicCodeUtil.generate();
+            } while (creatorProfileRepo.existsByPublicCode(code));
+            cp.setPublicCode(code);
+        }
         creatorProfileRepo.save(cp);
 
         return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(user.getId()));
@@ -434,6 +442,7 @@ public class AdminService {
             ri.setId(cr.getId());
             ri.setName(cr.getName());
             ri.setEmoji(cr.getEmoji());
+            ri.setPrice(cr.getPrice());
             return ri;
         }).collect(Collectors.toList()));
         return r;

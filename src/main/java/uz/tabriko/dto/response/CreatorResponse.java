@@ -36,6 +36,7 @@ public class CreatorResponse {
     private List<PortfolioItemResponse> portfolio;
     private List<CreatorContactResponse> contacts = new ArrayList<>();
     private List<RequisiteItemResponse> requisites = new ArrayList<>();
+    private String publicCode;
     private String status;
     private Instant createdAt;
 }

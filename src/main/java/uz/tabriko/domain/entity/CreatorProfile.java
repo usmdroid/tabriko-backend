@@ -92,6 +92,9 @@ public class CreatorProfile {
     @Column(name = "profile_complete", nullable = false)
     private boolean profileComplete = false;
 
+    @Column(name = "public_code", unique = true, nullable = false, length = 20)
+    private String publicCode;
+
     @Column(name = "passport_series", length = 2)
     private String passportSeries;
 

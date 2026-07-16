@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.common.util.PhoneUtil;
+import uz.tabriko.common.util.PublicCodeUtil;
 import uz.tabriko.domain.entity.*;
 import uz.tabriko.domain.enums.*;
 import uz.tabriko.dto.request.AdminApplicationDecisionRequest;
@@ -381,6 +382,11 @@ public class ApplicationService {
             }
             profile.setProfileComplete(false);
             profile.setTier(CreatorTier.STANDARD);
+            String code;
+            do {
+                code = PublicCodeUtil.generate();
+            } while (creatorProfileRepo.existsByPublicCode(code));
+            profile.setPublicCode(code);
             creatorProfileRepo.save(profile);
         }
 

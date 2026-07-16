@@ -110,6 +110,18 @@ public class CatalogService {
     public CreatorResponse getCreator(UUID creatorId) {
         CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
                 .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        return buildFullCreatorResponse(cp);
+    }
+
+    @Transactional(readOnly = true)
+    public CreatorResponse getCreatorByCode(String code) {
+        CreatorProfile cp = creatorProfileRepo.findByPublicCode(code)
+                .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        return buildFullCreatorResponse(cp);
+    }
+
+    private CreatorResponse buildFullCreatorResponse(CreatorProfile cp) {
+        UUID creatorId = cp.getUserId();
         List<PortfolioItem> portfolio = portfolioRepo.findPublicWithConsent(creatorId);
         List<CreatorServiceOffering> services = serviceOfferingRepo.findByCreator_Id(creatorId);
         CreatorResponse r = mapper.toCreatorResponse(cp, portfolio, services);
@@ -119,6 +131,7 @@ public class CatalogService {
             ri.setId(cr.getId());
             ri.setName(cr.getName());
             ri.setEmoji(cr.getEmoji());
+            ri.setPrice(cr.getPrice());
             return ri;
         }).collect(Collectors.toList()));
         return r;

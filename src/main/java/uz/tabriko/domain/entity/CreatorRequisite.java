@@ -6,6 +6,7 @@ import lombok.Setter;
 import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.domain.enums.RequisiteSource;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -38,6 +39,9 @@ public class CreatorRequisite {
     @Enumerated(EnumType.STRING)
     @Column(name = "service_type", nullable = false, length = 16)
     private OrderType serviceType;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal price;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();

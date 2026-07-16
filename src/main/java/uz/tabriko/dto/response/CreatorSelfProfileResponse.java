@@ -31,6 +31,7 @@ public class CreatorSelfProfileResponse {
     private Set<OrderOption> options;
     private List<CreatorServiceResponse> services;
     private List<PortfolioItemResponse> portfolio;
+    private String publicCode;
     private String status;
     private Instant createdAt;
     private CreatorTier tier;

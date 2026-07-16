@@ -46,6 +46,9 @@ public class S3MediaStorageService implements MediaStorageService {
     @Value("${app.base-url:http://localhost:8080}")
     private String appBaseUrl;
 
+    @Value("${s3.public-base-url:}")
+    private String s3PublicBaseUrl;
+
     @Autowired
     private JwtUtil jwtUtil;
 
@@ -98,6 +101,20 @@ public class S3MediaStorageService implements MediaStorageService {
         // which fetches the object directly via S3Client — no S3 presigning needed here.
         String token = jwtUtil.generateDownloadToken(mediaUrl, userId, ttlSeconds);
         return appBaseUrl + "/api/v1/media/signed?token=" + token;
+    }
+
+    @Override
+    public String publicUrl(String rawUrl) {
+        if (rawUrl == null) return null;
+        if (rawUrl.startsWith("s3://")) {
+            // s3://bucket/key → <s3PublicBaseUrl>/key
+            String withoutScheme = rawUrl.substring("s3://".length());
+            int slashIdx = withoutScheme.indexOf('/');
+            String key = slashIdx >= 0 ? withoutScheme.substring(slashIdx + 1) : withoutScheme;
+            return s3PublicBaseUrl.stripTrailing() + "/" + key;
+        }
+        // Already an http(s) URL — return as-is
+        return rawUrl;
     }
 
     @Override

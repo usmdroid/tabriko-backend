@@ -53,6 +53,10 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
 
     Optional<CreatorProfile> findByUserId(UUID userId);
 
+    boolean existsByPublicCode(String publicCode);
+
+    Optional<CreatorProfile> findByPublicCode(String publicCode);
+
     @Query("SELECT COUNT(cp) FROM CreatorProfile cp WHERE cp.isVerified = true AND cp.profileComplete = true AND cp.user.status = :activeStatus")
     long countActiveCreators(@Param("activeStatus") UserStatus activeStatus);
 

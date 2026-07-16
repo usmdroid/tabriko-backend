@@ -11,13 +11,18 @@ import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.domain.enums.UserStatus;
 import uz.tabriko.dto.response.CreatorResponse;
 import uz.tabriko.dto.response.CreatorSelfProfileResponse;
+import uz.tabriko.infrastructure.media.MediaStorageService;
 
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class UserMapperTest {
 
@@ -245,5 +250,70 @@ class UserMapperTest {
         CreatorSelfProfileResponse r = mapper.toCreatorSelfProfileResponse(cp, List.of(portfolioItem()));
         assertThat(r.getMissing()).isEmpty();
         assertThat(r.isProfileComplete()).isTrue();
+    }
+
+    // --- publicUrl wiring ---
+
+    private UserMapper mapperWithMockStorage(MediaStorageService storage) throws Exception {
+        UserMapper m = new UserMapper();
+        Field field = UserMapper.class.getDeclaredField("mediaStorage");
+        field.setAccessible(true);
+        field.set(m, storage);
+        return m;
+    }
+
+    @Test
+    void publicUrl_appliedToCreatorResponseAvatarBannerAndPortfolio() throws Exception {
+        MediaStorageService mockStorage = mock(MediaStorageService.class);
+        when(mockStorage.publicUrl(any())).thenAnswer(inv -> {
+            String raw = inv.getArgument(0);
+            return raw == null ? null : "https://cdn.example.com/" + raw.replaceFirst(".*[/\\\\]", "");
+        });
+
+        CreatorProfile cp = minimalProfile();
+        cp.setAvatarUrl("s3://bucket/avatars/uuid.jpg");
+        cp.setBannerUrl("s3://bucket/banners/uuid.jpg");
+
+        PortfolioItem item = new PortfolioItem();
+        item.setMediaUrl("s3://bucket/portfolio/uuid.mp4");
+
+        CreatorResponse r = mapperWithMockStorage(mockStorage).toCreatorResponse(cp, List.of(item));
+
+        assertThat(r.getAvatarUrl()).startsWith("https://");
+        assertThat(r.getBannerUrl()).startsWith("https://");
+        assertThat(r.getPortfolio().get(0).getMediaUrl()).startsWith("https://");
+    }
+
+    @Test
+    void publicUrl_appliedToSelfProfileResponse() throws Exception {
+        MediaStorageService mockStorage = mock(MediaStorageService.class);
+        when(mockStorage.publicUrl(any())).thenAnswer(inv -> {
+            String raw = inv.getArgument(0);
+            return raw == null ? null : "https://cdn.example.com/" + raw.replaceFirst(".*[/\\\\]", "");
+        });
+
+        CreatorProfile cp = minimalProfile();
+        cp.setAvatarUrl("s3://bucket/avatars/uuid.jpg");
+        cp.setBannerUrl("s3://bucket/banners/uuid.jpg");
+
+        CreatorSelfProfileResponse r = mapperWithMockStorage(mockStorage).toCreatorSelfProfileResponse(cp, List.of());
+
+        assertThat(r.getAvatarUrl()).startsWith("https://");
+        assertThat(r.getBannerUrl()).startsWith("https://");
+    }
+
+    @Test
+    void publicUrl_nullInput_returnsNull() throws Exception {
+        MediaStorageService mockStorage = mock(MediaStorageService.class);
+        when(mockStorage.publicUrl(null)).thenReturn(null);
+
+        CreatorProfile cp = minimalProfile();
+        cp.setAvatarUrl(null);
+        cp.setBannerUrl(null);
+
+        CreatorResponse r = mapperWithMockStorage(mockStorage).toCreatorResponse(cp, List.of());
+
+        assertThat(r.getAvatarUrl()).isNull();
+        assertThat(r.getBannerUrl()).isNull();
     }
 }

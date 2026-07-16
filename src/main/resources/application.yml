@@ -54,6 +54,9 @@ app:
   storage:
     provider: ${STORAGE_PROVIDER:local}   # local | s3
 
+s3:
+  public-base-url: ${S3_PUBLIC_BASE_URL:}   # CDN or public-read bucket base URL for S3 provider
+
   commission-percent: ${COMMISSION_PERCENT:15}
 
   payment:
