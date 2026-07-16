@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.common.util.HmacUtil;
+import uz.tabriko.domain.entity.CreatorProfile;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.entity.WalletTransaction;
 import uz.tabriko.domain.enums.OrderStatus;
@@ -18,6 +19,7 @@ import uz.tabriko.domain.enums.TransactionType;
 import uz.tabriko.dto.request.WalletCallbackRequest;
 import uz.tabriko.dto.request.WithdrawRequest;
 import uz.tabriko.infrastructure.payment.PaymentProvider;
+import uz.tabriko.repository.CreatorProfileRepository;
 import uz.tabriko.repository.OrderRepository;
 import uz.tabriko.repository.UserRepository;
 import uz.tabriko.repository.WalletTransactionRepository;
@@ -37,6 +39,7 @@ class WalletServiceTest {
     @Mock WalletTransactionRepository walletTxRepo;
     @Mock UserRepository userRepo;
     @Mock OrderRepository orderRepo;
+    @Mock CreatorProfileRepository creatorProfileRepo;
     @Mock PaymentProvider paymentProvider;
     @Mock UserMapper mapper;
 
@@ -57,6 +60,11 @@ class WalletServiceTest {
         user.setId(userId);
         ReflectionTestUtils.setField(walletService, "commissionPercent", 15);
         ReflectionTestUtils.setField(walletService, "callbackSecret", "test-callback-secret");
+
+        // Default: creator has payout configured; individual tests can override.
+        CreatorProfile cpWithPayout = new CreatorProfile();
+        cpWithPayout.setPayoutCard("8600123412341234");
+        lenient().when(creatorProfileRepo.findByUserId(userId)).thenReturn(Optional.of(cpWithPayout));
     }
 
     // --- Balance calculation ---
@@ -361,6 +369,37 @@ class WalletServiceTest {
             .satisfies(e -> assertThat(((ApiException) e).getStatus().value()).isEqualTo(401));
 
         verify(walletTxRepo, never()).findById(any());
+    }
+
+    // --- Payout guard ---
+
+    @Test
+    void withdraw_throws400_whenNoPayoutMethodConfigured() {
+        CreatorProfile cpNoPayment = new CreatorProfile();
+        when(creatorProfileRepo.findByUserId(userId)).thenReturn(Optional.of(cpNoPayment));
+
+        WithdrawRequest req = new WithdrawRequest();
+        req.setAmount(new BigDecimal("50.00"));
+
+        assertThatThrownBy(() -> walletService.withdraw(userId, req))
+            .isInstanceOf(ApiException.class)
+            .hasMessageContaining("Payout method not configured");
+
+        verify(walletTxRepo, never()).save(any());
+    }
+
+    @Test
+    void withdraw_throws404_whenCreatorProfileNotFound() {
+        when(creatorProfileRepo.findByUserId(userId)).thenReturn(Optional.empty());
+
+        WithdrawRequest req = new WithdrawRequest();
+        req.setAmount(new BigDecimal("50.00"));
+
+        assertThatThrownBy(() -> walletService.withdraw(userId, req))
+            .isInstanceOf(ApiException.class)
+            .satisfies(e -> assertThat(((ApiException) e).getStatus().value()).isEqualTo(404));
+
+        verify(walletTxRepo, never()).save(any());
     }
 
     private WalletCallbackRequest signedCallback(Long transactionId, BigDecimal amount, String providerRef) {

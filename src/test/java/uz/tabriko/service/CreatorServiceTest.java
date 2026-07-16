@@ -242,7 +242,11 @@ class CreatorServiceTest {
     // ===== missingItems list (via real UserMapper — verifies gate criteria) =====
 
     @Test
-    void missingItems_emptyWhenAllThreeMet() {
+    void missingItems_emptyWhenAllCriteriaMet() {
+        creatorProfile.setBio("A bio");
+        creatorProfile.setPriceFrom(new BigDecimal("50.00"));
+        // deliveryDays defaults to 3 in the entity, so no explicit set needed
+        creatorProfile.setSocialTelegram("@creator");
         creatorProfile.setIdDocumentNumber("AA1234567");
         creatorProfile.setIdDocumentUrl("https://cdn/doc.jpg");
         creatorProfile.setPayoutCard("8600123456789012");
@@ -306,8 +310,8 @@ class CreatorServiceTest {
     }
 
     @Test
-    void missingItems_doesNotCheckBioOrSocial() {
-        // bio, social, priceFrom, deliveryDays all absent — must NOT appear in missingItems
+    void missingItems_checksBioSocialAndPriceFrom() {
+        // bio, social, priceFrom absent — all three must appear in missingItems
         creatorProfile.setIdDocumentNumber("AA1234567");
         creatorProfile.setIdDocumentUrl("https://cdn/doc.jpg");
         creatorProfile.setPayoutCard("8600123456789012");
@@ -315,8 +319,8 @@ class CreatorServiceTest {
 
         CreatorSelfProfileResponse r = realMapper.toCreatorSelfProfileResponse(creatorProfile, List.of(item));
 
-        assertThat(r.getMissing()).doesNotContain("bio", "priceFrom", "deliveryDays", "social");
-        assertThat(r.isProfileComplete()).isTrue();
+        assertThat(r.getMissing()).contains("bio", "priceFrom", "social");
+        assertThat(r.isProfileComplete()).isFalse();
     }
 
     // ===== masking =====

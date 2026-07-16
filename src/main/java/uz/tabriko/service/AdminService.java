@@ -30,8 +30,10 @@ import uz.tabriko.dto.request.AdminCategoryRequest;
 import uz.tabriko.dto.request.UserNotifyRequest;
 import uz.tabriko.dto.response.*;
 import uz.tabriko.infrastructure.firebase.PushNotificationService;
+import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.infrastructure.payment.PaymentGateway;
 import uz.tabriko.repository.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.security.SecureRandom;
@@ -64,6 +66,7 @@ public class AdminService {
     private final PaymentGateway paymentGateway;
     private final NotificationService notificationService;
     private final PushNotificationService pushService;
+    private final MediaStorageService mediaStorageService;
     private final UserMapper mapper;
 
     @Transactional
@@ -389,6 +392,30 @@ public class AdminService {
             case "exclusive" -> cp.setExclusive(true);
             default -> throw ApiException.badRequest("Invalid flag: " + flag + ". Allowed: top, exclusive");
         }
+        creatorProfileRepo.save(cp);
+        return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(creatorId));
+    }
+
+    // --- Creator avatar ---
+
+    private static final long MAX_AVATAR_BYTES = 5L * 1024 * 1024;
+
+    @Transactional
+    public CreatorResponse uploadCreatorAvatar(UUID creatorId, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw ApiException.badRequest("Avatar file is required");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw ApiException.badRequest("Only image files are allowed");
+        }
+        if (file.getSize() > MAX_AVATAR_BYTES) {
+            throw ApiException.badRequest("File size must not exceed 5 MB");
+        }
+        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
+                .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        String url = mediaStorageService.store(file, "avatars");
+        cp.setAvatarUrl(url);
         creatorProfileRepo.save(cp);
         return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(creatorId));
     }

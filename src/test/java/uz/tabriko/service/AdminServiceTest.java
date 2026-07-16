@@ -30,7 +30,10 @@ import uz.tabriko.dto.response.CreatorContactResponse;
 import uz.tabriko.dto.response.CreatorResponse;
 import uz.tabriko.dto.response.PlatformSettings;
 import uz.tabriko.infrastructure.firebase.PushNotificationService;
+import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.repository.*;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.http.MediaType;
 
 import org.springframework.data.domain.Page;
 
@@ -63,6 +66,7 @@ class AdminServiceTest {
     @Mock uz.tabriko.infrastructure.payment.PaymentGateway paymentGateway;
     @Mock NotificationService notificationService;
     @Mock PushNotificationService pushService;
+    @Mock MediaStorageService mediaStorageService;
     @Mock UserMapper mapper;
 
     @InjectMocks AdminService adminService;
@@ -813,5 +817,80 @@ class AdminServiceTest {
 
         verify(pushService, never()).sendPush(any(), any(), any(), any());
         verify(notificationService, never()).createInAppNotification(any(), any(), any(), any());
+    }
+
+    // ===== POST /admin/creators/{id}/avatar — uploadCreatorAvatar =====
+
+    @Test
+    void uploadCreatorAvatar_validImage_storesAndReturnsDto() {
+        UUID creatorId = UUID.randomUUID();
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUserId(creatorId);
+        cp.setUser(clientUser);
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(cp));
+        when(mediaStorageService.store(any(), eq("avatars"))).thenReturn("http://localhost:8080/files/avatars/img.jpg");
+        when(creatorProfileRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(portfolioRepo.findPublicWithConsent(creatorId)).thenReturn(List.of());
+
+        CreatorResponse expected = new CreatorResponse();
+        expected.setId(creatorId);
+        expected.setAvatarUrl("http://localhost:8080/files/avatars/img.jpg");
+        when(mapper.toCreatorResponse(any(CreatorProfile.class), anyList())).thenReturn(expected);
+
+        MockMultipartFile file = new MockMultipartFile("file", "avatar.jpg",
+                MediaType.IMAGE_JPEG_VALUE, new byte[]{(byte) 0xFF, (byte) 0xD8});
+
+        CreatorResponse result = adminService.uploadCreatorAvatar(creatorId, file);
+
+        assertThat(result.getAvatarUrl()).isEqualTo("http://localhost:8080/files/avatars/img.jpg");
+        assertThat(cp.getAvatarUrl()).isEqualTo("http://localhost:8080/files/avatars/img.jpg");
+        verify(creatorProfileRepo).save(cp);
+        verify(mediaStorageService).store(file, "avatars");
+    }
+
+    @Test
+    void uploadCreatorAvatar_nonImageContentType_throwsBadRequest() {
+        UUID creatorId = UUID.randomUUID();
+        MockMultipartFile pdf = new MockMultipartFile("file", "doc.pdf",
+                MediaType.APPLICATION_PDF_VALUE, new byte[]{0x25, 0x50, 0x44, 0x46});
+
+        assertThatThrownBy(() -> adminService.uploadCreatorAvatar(creatorId, pdf))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("image");
+
+        verify(mediaStorageService, never()).store(any(), any());
+        verify(creatorProfileRepo, never()).save(any());
+    }
+
+    @Test
+    void uploadCreatorAvatar_oversizedFile_throwsBadRequest() {
+        UUID creatorId = UUID.randomUUID();
+        byte[] bigBytes = new byte[6 * 1024 * 1024]; // 6 MB
+        MockMultipartFile large = new MockMultipartFile("file", "big.jpg",
+                MediaType.IMAGE_JPEG_VALUE, bigBytes);
+
+        assertThatThrownBy(() -> adminService.uploadCreatorAvatar(creatorId, large))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("5 MB");
+
+        verify(mediaStorageService, never()).store(any(), any());
+        verify(creatorProfileRepo, never()).save(any());
+    }
+
+    @Test
+    void uploadCreatorAvatar_creatorNotFound_throwsNotFound() {
+        UUID creatorId = UUID.randomUUID();
+        MockMultipartFile file = new MockMultipartFile("file", "avatar.jpg",
+                MediaType.IMAGE_JPEG_VALUE, new byte[]{(byte) 0xFF, (byte) 0xD8});
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminService.uploadCreatorAvatar(creatorId, file))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not found");
+
+        verify(mediaStorageService, never()).store(any(), any());
+        verify(creatorProfileRepo, never()).save(any());
     }
 }

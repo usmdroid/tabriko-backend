@@ -21,6 +21,8 @@ import uz.tabriko.dto.response.TopUpInitResponse;
 import uz.tabriko.dto.response.WalletResponse;
 import uz.tabriko.infrastructure.payment.PaymentInitResult;
 import uz.tabriko.infrastructure.payment.PaymentProvider;
+import uz.tabriko.domain.entity.CreatorProfile;
+import uz.tabriko.repository.CreatorProfileRepository;
 import uz.tabriko.repository.OrderRepository;
 import uz.tabriko.repository.UserRepository;
 import uz.tabriko.repository.WalletTransactionRepository;
@@ -38,6 +40,7 @@ public class WalletService {
     private final WalletTransactionRepository walletTxRepo;
     private final UserRepository userRepo;
     private final OrderRepository orderRepo;
+    private final CreatorProfileRepository creatorProfileRepo;
     private final PaymentProvider paymentProvider;
     private final UserMapper mapper;
 
@@ -211,6 +214,14 @@ public class WalletService {
 
     @Transactional
     public void withdraw(UUID userId, WithdrawRequest req) {
+        CreatorProfile cp = creatorProfileRepo.findByUserId(userId)
+            .orElseThrow(() -> ApiException.notFound("Creator profile not found"));
+        boolean hasPayout = (cp.getPayoutCard() != null && !cp.getPayoutCard().isBlank())
+            || (cp.getPayoutAccount() != null && !cp.getPayoutAccount().isBlank());
+        if (!hasPayout) {
+            throw ApiException.badRequest("Payout method not configured. Please add a payout method before withdrawing.");
+        }
+
         // Pessimistic lock on user row prevents concurrent double-spend
         User user = userRepo.findByIdForUpdate(userId)
             .orElseThrow(() -> ApiException.notFound("User not found"));

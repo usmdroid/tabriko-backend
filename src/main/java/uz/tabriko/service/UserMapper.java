@@ -211,13 +211,19 @@ public class UserMapper {
 
     private List<String> computeMissingItems(CreatorProfile cp, List<PortfolioItem> portfolio) {
         List<String> missing = new ArrayList<>();
+        if (cp.getBio() == null || cp.getBio().isBlank()) missing.add("bio");
+        if (cp.getPriceFrom() == null || cp.getPriceFrom().compareTo(BigDecimal.ZERO) == 0) missing.add("priceFrom");
+        if (cp.getDeliveryDays() == 0) missing.add("deliveryDays");
+        boolean hasSocial = (cp.getSocialTelegram() != null && !cp.getSocialTelegram().isBlank())
+                || (cp.getSocialInstagram() != null && !cp.getSocialInstagram().isBlank());
+        if (!hasSocial) missing.add("social");
+        if (portfolio == null || portfolio.isEmpty()) missing.add("portfolio");
         boolean hasPassport = cp.getIdDocumentNumber() != null && !cp.getIdDocumentNumber().isBlank()
                 && cp.getIdDocumentUrl() != null && !cp.getIdDocumentUrl().isBlank();
         if (!hasPassport) missing.add("passport");
         boolean hasPayment = (cp.getPayoutCard() != null && !cp.getPayoutCard().isBlank())
                 || (cp.getPayoutAccount() != null && !cp.getPayoutAccount().isBlank());
         if (!hasPayment) missing.add("payment");
-        if (portfolio == null || portfolio.isEmpty()) missing.add("portfolio");
         return missing;
     }
 
