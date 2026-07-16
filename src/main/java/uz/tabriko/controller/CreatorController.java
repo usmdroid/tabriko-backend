@@ -121,6 +121,14 @@ public class CreatorController {
                 .body(BaseResponse.created(creatorService.uploadPassportFile(principal.getUserId(), file)));
     }
 
+    @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload or replace own avatar image")
+    public ResponseEntity<BaseResponse<CreatorSelfProfileResponse>> uploadAvatar(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(BaseResponse.ok(creatorService.uploadOwnAvatar(principal.getUserId(), file)));
+    }
+
     @GetMapping("/portfolio")
     @Operation(summary = "Get own portfolio items")
     public ResponseEntity<BaseResponse<List<PortfolioItemResponse>>> getPortfolio(
