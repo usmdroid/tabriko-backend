@@ -92,6 +92,10 @@ app:
   telegram:
     bot-token: ${TELEGRAM_BOT_TOKEN:}
     webhook-secret: ${TELEGRAM_WEBHOOK_SECRET:}
+    alert:
+      chat-id: ${TELEGRAM_ALERT_CHAT_ID:}
+    alerts:
+      enabled: ${TELEGRAM_ALERTS_ENABLED:true}
 
 springdoc:
   api-docs:
