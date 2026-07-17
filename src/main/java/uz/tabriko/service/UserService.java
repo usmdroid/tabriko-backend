@@ -102,6 +102,18 @@ public class UserService {
             throw ApiException.forbidden("Device is blocked.");
         }
 
+        // When looking up by deviceId, another user's row may already hold this token
+        // (account switch on the same physical device). Delete the stale row first so
+        // the unique fcm_token constraint cannot be violated on save.
+        if (deviceId != null && !deviceId.isBlank()) {
+            userDeviceRepo.findByFcmToken(token).ifPresent(stale -> {
+                if (device.getId() == null || !stale.getId().equals(device.getId())) {
+                    userDeviceRepo.delete(stale);
+                    userDeviceRepo.flush();
+                }
+            });
+        }
+
         device.setUser(user);
         device.setFcmToken(token);
         device.setPlatform(platform);

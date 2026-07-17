@@ -54,20 +54,19 @@ public class MediaController {
         return ResponseEntity.ok(BaseResponse.ok(mediaService.getDownloadUrl(principal.getUserId(), id)));
     }
 
-    // Authenticated — streams the file only to the user the download token was issued to,
-    // so a leaked token/URL can't be used by anyone other than the order's CLIENT/CREATOR.
+    // Public — the signed token IS the authorization (short-lived, user-bound, cryptographically signed).
+    // No Authorization header needed; media players/browsers can play directly via URL.
     @GetMapping("/media/signed")
-    @Operation(summary = "Stream signed media file (auth required, token bound to requesting user)")
-    public ResponseEntity<InputStreamResource> streamSigned(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @RequestParam String token
-    ) {
-        JwtUtil.DownloadTokenClaims claims = jwtUtil.extractDownloadClaims(token);
-        if (claims == null) {
-            throw ApiException.unauthorized("Invalid or expired download token");
+    @Operation(summary = "Stream signed media file (token-only auth, no Bearer header required)")
+    public ResponseEntity<InputStreamResource> streamSigned(@RequestParam String token) {
+        JwtUtil.DownloadTokenClaims claims;
+        try {
+            claims = jwtUtil.extractDownloadClaims(token);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        if (!claims.userId().equals(principal.getUserId())) {
-            throw ApiException.forbidden("This download link does not belong to you");
+        if (claims == null || claims.fileUrl() == null || claims.userId() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
         String contentType = URLConnection.guessContentTypeFromName(claims.fileUrl());

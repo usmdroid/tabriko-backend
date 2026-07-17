@@ -67,7 +67,8 @@ public class MediaService {
             order.getClient().getId(),
             "Order delivered",
             "Your order from " + order.getCreator().getName() + " is ready",
-            NotificationType.ORDER_DELIVERED
+            NotificationType.ORDER_DELIVERED,
+            order.getId()
         );
 
         MediaUploadResponse r = new MediaUploadResponse();

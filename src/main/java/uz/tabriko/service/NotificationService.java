@@ -77,6 +77,7 @@ public class NotificationService {
         n.setTitle(title);
         n.setBody(body);
         n.setType(type);
+        n.setOrderId(orderId);
         notificationRepo.save(n);
 
         Map<String, String> data = new HashMap<>();

@@ -35,6 +35,9 @@ public class Notification {
     @Column(name = "is_read")
     private boolean isRead = false;
 
+    @Column(name = "order_id")
+    private UUID orderId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 }

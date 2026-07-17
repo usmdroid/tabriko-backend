@@ -581,7 +581,8 @@ public class AdminService {
                 order.getClient().getId(),
                 "Order refunded",
                 "Your order has been refunded by the admin.",
-                NotificationType.ORDER_REFUNDED
+                NotificationType.ORDER_REFUNDED,
+                order.getId()
         );
     }
 

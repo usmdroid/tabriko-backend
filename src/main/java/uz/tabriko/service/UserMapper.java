@@ -386,6 +386,7 @@ public class UserMapper {
         r.setType(n.getType());
         r.setRead(n.isRead());
         r.setCreatedAt(n.getCreatedAt());
+        r.setOrderId(n.getOrderId());
         return r;
     }
 }

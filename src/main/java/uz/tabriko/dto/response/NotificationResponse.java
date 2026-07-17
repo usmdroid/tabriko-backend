@@ -4,6 +4,7 @@ import lombok.Data;
 import uz.tabriko.domain.enums.NotificationType;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Data
 public class NotificationResponse {
@@ -13,4 +14,5 @@ public class NotificationResponse {
     private NotificationType type;
     private boolean isRead;
     private Instant createdAt;
+    private UUID orderId;
 }

@@ -67,8 +67,8 @@ public class SecurityConfig {
                     "/swagger-ui/**",
                     "/swagger-ui.html",
                     "/v3/api-docs/**",
-                    // Order-delivery media is deliberately excluded: /api/v1/media/signed and
-                    // /files/media/** require authentication + ownership, unlike the folders below.
+                    // /api/v1/media/signed is public — the signed token IS the auth (short-lived, user-bound, signed).
+                    "/api/v1/media/signed",
                     "/files/portfolio/**",
                     "/files/kyc/**",
                     "/files/applications/**",

@@ -134,6 +134,98 @@ class DeviceIntegrityTest {
         assertThat(cap.getValue().getFcmToken()).isEqualTo("new-tok");
     }
 
+    // Scenario 3: Account switch — token T belongs to userA's row; userB logs in on same
+    // device (different deviceId) → stale row for userA deleted, userB's row saved with token T.
+
+    @Test
+    void registerFcmToken_tokenOwnedByOtherUser_differentDeviceId_claimsToken() {
+        UUID userAId = UUID.randomUUID();
+        User userA = new User();
+        userA.setId(userAId);
+
+        UserDevice staleDevice = new UserDevice();
+        staleDevice.setId(UUID.randomUUID());
+        staleDevice.setUser(userA);
+        staleDevice.setDeviceId("dev-A");
+        staleDevice.setFcmToken("shared-token");
+
+        // userB has no row for "dev-B" yet
+        when(userDeviceRepo.findByUserIdAndDeviceId(userId, "dev-B")).thenReturn(Optional.empty());
+        // but "shared-token" is already held by userA's row
+        when(userDeviceRepo.findByFcmToken("shared-token")).thenReturn(Optional.of(staleDevice));
+        PlatformSettingsEntity settings = new PlatformSettingsEntity();
+        settings.setBlockRootedDevices(false);
+        when(settingsRepo.findById(1)).thenReturn(Optional.of(settings));
+
+        userService.registerFcmToken(userId, "shared-token", Platform.ANDROID, "1.0", null, null, "dev-B", false);
+
+        verify(userDeviceRepo).delete(staleDevice);
+        verify(userDeviceRepo).flush();
+        ArgumentCaptor<UserDevice> cap = ArgumentCaptor.forClass(UserDevice.class);
+        verify(userDeviceRepo).save(cap.capture());
+        assertThat(cap.getValue().getUser()).isEqualTo(user);
+        assertThat(cap.getValue().getFcmToken()).isEqualTo("shared-token");
+    }
+
+    // Scenario 4: Account switch — same deviceId, new user. Row (userA, devD, tokenT) exists;
+    // userB registers with (devD, tokenT). Stale row deleted, userB's new row saved.
+
+    @Test
+    void registerFcmToken_tokenOwnedByOtherUser_sameDeviceId_claimsToken() {
+        UUID userAId = UUID.randomUUID();
+        User userA = new User();
+        userA.setId(userAId);
+
+        UserDevice staleDevice = new UserDevice();
+        staleDevice.setId(UUID.randomUUID());
+        staleDevice.setUser(userA);
+        staleDevice.setDeviceId("dev-D");
+        staleDevice.setFcmToken("token-T");
+
+        // userB's lookup by (userB, dev-D) returns nothing
+        when(userDeviceRepo.findByUserIdAndDeviceId(userId, "dev-D")).thenReturn(Optional.empty());
+        when(userDeviceRepo.findByFcmToken("token-T")).thenReturn(Optional.of(staleDevice));
+        PlatformSettingsEntity settings = new PlatformSettingsEntity();
+        settings.setBlockRootedDevices(false);
+        when(settingsRepo.findById(1)).thenReturn(Optional.of(settings));
+
+        userService.registerFcmToken(userId, "token-T", Platform.ANDROID, "1.0", null, null, "dev-D", false);
+
+        verify(userDeviceRepo).delete(staleDevice);
+        verify(userDeviceRepo).flush();
+        ArgumentCaptor<UserDevice> cap = ArgumentCaptor.forClass(UserDevice.class);
+        verify(userDeviceRepo).save(cap.capture());
+        assertThat(cap.getValue().getUser()).isEqualTo(user);
+        assertThat(cap.getValue().getFcmToken()).isEqualTo("token-T");
+        // only one row should exist after this call (the stale was deleted)
+    }
+
+    // Scenario 5: Idempotent re-registration — same user, same deviceId, same token.
+    // The resolved row IS the token row (same id); no delete, just an upsert.
+
+    @Test
+    void registerFcmToken_sameUserSameDeviceIdSameToken_idempotent() {
+        UUID rowId = UUID.randomUUID();
+        UserDevice existing = new UserDevice();
+        existing.setId(rowId);
+        existing.setUser(user);
+        existing.setDeviceId("dev-X");
+        existing.setFcmToken("token-X");
+
+        when(userDeviceRepo.findByUserIdAndDeviceId(userId, "dev-X")).thenReturn(Optional.of(existing));
+        // findByFcmToken returns the SAME row (same id)
+        when(userDeviceRepo.findByFcmToken("token-X")).thenReturn(Optional.of(existing));
+        PlatformSettingsEntity settings = new PlatformSettingsEntity();
+        settings.setBlockRootedDevices(false);
+        when(settingsRepo.findById(1)).thenReturn(Optional.of(settings));
+
+        userService.registerFcmToken(userId, "token-X", Platform.ANDROID, "2.0", null, null, "dev-X", false);
+
+        verify(userDeviceRepo, never()).delete(any(UserDevice.class));
+        verify(userDeviceRepo, never()).flush();
+        verify(userDeviceRepo).save(existing);
+    }
+
     // Scenario 6: No deviceId (old client) → falls back to fcm_token upsert
 
     @Test
