@@ -39,4 +39,5 @@ public class CreatorResponse {
     private String publicCode;
     private String status;
     private Instant createdAt;
+    private int activeWarningCount;
 }

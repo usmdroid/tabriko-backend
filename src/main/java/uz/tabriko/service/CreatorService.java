@@ -26,6 +26,7 @@ import uz.tabriko.dto.response.EarningsResponse;
 import uz.tabriko.dto.response.PortfolioItemResponse;
 import uz.tabriko.infrastructure.media.MediaStorageService;
 import uz.tabriko.repository.CategoryRepository;
+import uz.tabriko.repository.CreatorModerationMessageRepository;
 import uz.tabriko.repository.CreatorProfileRepository;
 import uz.tabriko.repository.CreatorServiceOfferingRepository;
 import uz.tabriko.repository.DeliveryRepository;
@@ -47,6 +48,7 @@ public class CreatorService {
     private final OrderRepository orderRepo;
     private final DeliveryRepository deliveryRepo;
     private final CreatorServiceOfferingRepository serviceOfferingRepo;
+    private final CreatorModerationMessageRepository moderationRepo;
     private final MediaStorageService mediaStorage;
     private final WalletService walletService;
     private final UserMapper mapper;
@@ -56,7 +58,9 @@ public class CreatorService {
         CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
             .orElseThrow(() -> ApiException.notFound("Creator profile not found"));
         List<PortfolioItem> items = portfolioRepo.findByCreatorId(creatorId);
-        return toSelfProfileResponse(cp, items);
+        CreatorSelfProfileResponse resp = toSelfProfileResponse(cp, items);
+        resp.setActiveWarningCount(moderationRepo.countActiveWarnings(creatorId));
+        return resp;
     }
 
     private CreatorSelfProfileResponse toSelfProfileResponse(CreatorProfile cp, List<PortfolioItem> items) {

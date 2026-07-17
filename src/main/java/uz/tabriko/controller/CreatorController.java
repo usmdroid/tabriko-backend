@@ -14,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.response.BaseResponse;
 import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.dto.request.AddCreatorRequisiteRequest;
+import uz.tabriko.dto.request.CreatorReplyRequest;
 import uz.tabriko.dto.request.PatchRequisiteRequest;
 import uz.tabriko.dto.request.CreateCreatorServiceRequest;
 import uz.tabriko.dto.request.UpdateCreatorKycRequest;
@@ -23,13 +24,16 @@ import uz.tabriko.dto.request.UpdatePayoutRequest;
 import uz.tabriko.dto.request.UpdatePortfolioVisibilityRequest;
 import uz.tabriko.dto.request.UpdateSocialRequest;
 import uz.tabriko.dto.response.CreatorKycResponse;
+import uz.tabriko.dto.response.CreatorModerationThreadResponse;
 import uz.tabriko.dto.response.CreatorRequisiteResponse;
 import uz.tabriko.dto.response.CreatorSelfProfileResponse;
 import uz.tabriko.dto.response.CreatorServiceResponse;
 import uz.tabriko.dto.response.EarningsResponse;
+import uz.tabriko.dto.response.ModerationMessageResponse;
 import uz.tabriko.dto.response.PortfolioItemResponse;
 import uz.tabriko.security.UserPrincipal;
 import uz.tabriko.service.CreatorService;
+import uz.tabriko.service.ModerationService;
 import uz.tabriko.service.RequisiteService;
 
 import java.util.List;
@@ -44,6 +48,7 @@ public class CreatorController {
 
     private final CreatorService creatorService;
     private final RequisiteService requisiteService;
+    private final ModerationService moderationService;
 
     @GetMapping("/profile")
     @Operation(summary = "Get own creator profile")
@@ -270,5 +275,24 @@ public class CreatorController {
     ) {
         requisiteService.deleteCreatorRequisite(principal.getUserId(), id);
         return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    // --- Moderation thread ---
+
+    @GetMapping("/moderation")
+    @Operation(summary = "Get own moderation thread (marks admin messages as read)")
+    public ResponseEntity<BaseResponse<CreatorModerationThreadResponse>> getModerationThread(
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(moderationService.getCreatorThread(principal.getUserId())));
+    }
+
+    @PostMapping("/moderation")
+    @Operation(summary = "Post a reply to the moderation thread")
+    public ResponseEntity<BaseResponse<ModerationMessageResponse>> postModerationReply(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody CreatorReplyRequest req
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(moderationService.creatorReply(principal.getUserId(), req)));
     }
 }

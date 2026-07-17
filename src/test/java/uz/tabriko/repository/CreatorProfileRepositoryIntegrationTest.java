@@ -100,6 +100,8 @@ class CreatorProfileRepositoryIntegrationTest extends PostgresTestSupport {
         cp.setTop(top);
         cp.setRatingCount(ratingCount);
         cp.setTier(CreatorTier.STANDARD);
+        // public_code is NOT NULL (V47); derive a short unique code from the phone digits
+        cp.setPublicCode(phone.replaceAll("[^0-9]", "").substring(Math.max(0, phone.replaceAll("[^0-9]", "").length() - 10)));
         em.persist(cp);
         return cp;
     }
@@ -281,5 +283,79 @@ class CreatorProfileRepositoryIntegrationTest extends PostgresTestSupport {
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().get(0).getUser().getName()).isEqualTo("Any Creator");
         assertThat(page.getContent().get(0).getCategory().getName()).isEqualTo("Ta'lim");
+    }
+
+    // ===== SUSPENDED filter — public catalog hides suspended, admin sees all =====
+
+    @Test
+    void findAllFiltered_excludesSuspendedCreators() {
+        category = persistCategory("Suspension_findAll");
+        persistCreator("+998900005001", "Active Creator", true, true, false, 0, UserStatus.ACTIVE);
+        persistCreator("+998900005002", "Suspended Creator", true, true, false, 0, UserStatus.SUSPENDED);
+        em.flush();
+        em.clear();
+
+        Page<CreatorProfile> page = creatorProfileRepo.findAllFiltered(null, null, null, PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).getUser().getName()).isEqualTo("Active Creator");
+    }
+
+    @Test
+    void findAllFiltered_reappearsAfterReactivation() {
+        category = persistCategory("Suspension_reactivate");
+        CreatorProfile suspended = persistCreator("+998900005003", "Was Suspended", true, true, false, 0, UserStatus.SUSPENDED);
+        em.flush();
+
+        assertThat(creatorProfileRepo.findAllFiltered(null, null, null, PageRequest.of(0, 10)).getContent()).isEmpty();
+
+        suspended.getUser().setStatus(UserStatus.ACTIVE);
+        em.flush();
+        em.clear();
+
+        Page<CreatorProfile> page = creatorProfileRepo.findAllFiltered(null, null, null, PageRequest.of(0, 10));
+        assertThat(page.getContent()).hasSize(1);
+        assertThat(page.getContent().get(0).getUser().getName()).isEqualTo("Was Suspended");
+    }
+
+    @Test
+    void findAllWithUser_adminList_includesSuspendedCreators() {
+        category = persistCategory("Suspension_admin");
+        persistCreator("+998900005004", "Active Admin Creator", false, false, false, 0, UserStatus.ACTIVE);
+        persistCreator("+998900005005", "Suspended Admin Creator", false, false, false, 0, UserStatus.SUSPENDED);
+        em.flush();
+        em.clear();
+
+        Page<CreatorProfile> page = creatorProfileRepo.findAllWithUser(PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).hasSize(2);
+    }
+
+    @Test
+    void findTop10_excludesSuspendedCreators() {
+        category = persistCategory("Suspension_top10");
+        persistCreator("+998900005006", "Active Top", true, true, true, 5, UserStatus.ACTIVE);
+        persistCreator("+998900005007", "Suspended Top", true, true, true, 5, UserStatus.SUSPENDED);
+        em.flush();
+        em.clear();
+
+        List<CreatorProfile> results = creatorProfileRepo.findTop10();
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).getUser().getName()).isEqualTo("Active Top");
+    }
+
+    @Test
+    void findForYou_excludesSuspendedCreators() {
+        category = persistCategory("Suspension_forYou");
+        persistCreator("+998900005008", "Active ForYou", true, true, false, 10, UserStatus.ACTIVE);
+        persistCreator("+998900005009", "Suspended ForYou", true, true, false, 10, UserStatus.SUSPENDED);
+        em.flush();
+        em.clear();
+
+        List<CreatorProfile> results = creatorProfileRepo.findForYou(PageRequest.of(0, 10));
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).getUser().getName()).isEqualTo("Active ForYou");
     }
 }

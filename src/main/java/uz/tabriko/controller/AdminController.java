@@ -11,20 +11,25 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import uz.tabriko.common.response.BaseResponse;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import uz.tabriko.dto.request.AddCreatorContactRequest;
 import uz.tabriko.dto.request.AddCreatorRequest;
 import uz.tabriko.dto.request.AdminCategoryRequest;
 import uz.tabriko.dto.request.AdminOccasionRequest;
 import uz.tabriko.dto.request.AdminPromotionRequest;
 import uz.tabriko.dto.request.AdminRequisiteRequest;
+import uz.tabriko.dto.request.AdminSendModerationRequest;
 import uz.tabriko.dto.request.BroadcastNotificationRequest;
 import uz.tabriko.dto.request.FlagCreatorRequest;
 import uz.tabriko.dto.request.PatchRequisiteRequest;
+import uz.tabriko.dto.request.SuspendCreatorRequest;
 import uz.tabriko.dto.request.UserNotifyRequest;
 import uz.tabriko.dto.response.NotifyResultResponse;
 import uz.tabriko.dto.response.PlatformSettings;
+import uz.tabriko.security.UserPrincipal;
 import uz.tabriko.service.AdminBroadcastService;
 import uz.tabriko.service.AdminService;
+import uz.tabriko.service.ModerationService;
 import uz.tabriko.service.OccasionService;
 import uz.tabriko.service.PromotionService;
 import uz.tabriko.service.RequisiteService;
@@ -43,6 +48,7 @@ public class AdminController {
     private final PromotionService promotionService;
     private final AdminBroadcastService adminBroadcastService;
     private final RequisiteService requisiteService;
+    private final ModerationService moderationService;
 
     // --- Notifications ---
 
@@ -244,6 +250,47 @@ public class AdminController {
         return ResponseEntity.ok(BaseResponse.ok(adminService.flagCreator(id, req.getFlag())));
     }
 
+    @PostMapping("/creators/{id}/suspend")
+    @Operation(summary = "Suspend a creator with a reason")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> suspendCreator(
+            @PathVariable UUID id,
+            @Valid @RequestBody SuspendCreatorRequest req
+    ) {
+        adminService.suspendCreator(id, req.getReason());
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    @PostMapping("/creators/{id}/reactivate")
+    @Operation(summary = "Reactivate a suspended creator")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> reactivateCreator(@PathVariable UUID id) {
+        adminService.reactivateCreator(id);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    @DeleteMapping("/creators/{id}/avatar")
+    @Operation(summary = "Remove a creator's avatar and suspend with the given reason")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> deleteCreatorAvatar(
+            @PathVariable UUID id,
+            @Valid @RequestBody SuspendCreatorRequest req
+    ) {
+        adminService.deleteCreatorAvatar(id, req.getReason());
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    @DeleteMapping("/creators/{id}/banner")
+    @Operation(summary = "Remove a creator's banner and suspend with the given reason")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> deleteCreatorBanner(
+            @PathVariable UUID id,
+            @Valid @RequestBody SuspendCreatorRequest req
+    ) {
+        adminService.deleteCreatorBanner(id, req.getReason());
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
     @GetMapping("/orders")
     @Operation(summary = "List all orders (admin) — returns a page; frontend reads .content")
     public ResponseEntity<BaseResponse<?>> listOrders(
@@ -342,6 +389,24 @@ public class AdminController {
     @PreAuthorize("hasRole('SUPERADMIN')")
     public ResponseEntity<BaseResponse<?>> updateSettings(@RequestBody PlatformSettings dto) {
         return ResponseEntity.ok(BaseResponse.ok(adminService.updateSettings(dto)));
+    }
+
+    // --- Creator moderation thread ---
+
+    @GetMapping("/creators/{id}/moderation")
+    @Operation(summary = "Get the full moderation thread for a creator")
+    public ResponseEntity<BaseResponse<?>> getCreatorModerationThread(@PathVariable UUID id) {
+        return ResponseEntity.ok(BaseResponse.ok(moderationService.getAdminThread(id)));
+    }
+
+    @PostMapping("/creators/{id}/moderation")
+    @Operation(summary = "Append a MESSAGE or WARNING to a creator's moderation thread")
+    public ResponseEntity<BaseResponse<?>> appendCreatorModerationMessage(
+            @PathVariable UUID id,
+            @Valid @RequestBody AdminSendModerationRequest req,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(moderationService.adminAppend(id, req, principal.getUserId())));
     }
 
     // --- Requisites ---

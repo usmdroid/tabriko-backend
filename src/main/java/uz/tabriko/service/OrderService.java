@@ -21,6 +21,7 @@ import uz.tabriko.dto.response.OrderResponse;
 import uz.tabriko.dto.response.PageResponse;
 import uz.tabriko.infrastructure.payment.PaymentGateway;
 import uz.tabriko.repository.*;
+import uz.tabriko.repository.CreatorRequisiteRepository;
 import uz.tabriko.repository.CreatorViolationRepository;
 
 import java.math.BigDecimal;
@@ -48,6 +49,7 @@ public class OrderService {
     private final PaymentGateway paymentGateway;
     private final NotificationService notificationService;
     private final UserMapper mapper;
+    private final CreatorRequisiteRepository creatorRequisiteRepo;
 
     @Value("${app.commission-percent:15}")
     private int commissionPercent;
@@ -72,6 +74,25 @@ public class OrderService {
         BigDecimal price = ServicePricingCalculator.effectivePrice(serviceOffering, Instant.now());
         Instant deadline = Instant.now().plus(serviceOffering.getDeliveryDays(), ChronoUnit.DAYS);
 
+        List<uz.tabriko.domain.entity.CreatorRequisite> selectedRequisites = List.of();
+        if (req.getRequisiteIds() != null && !req.getRequisiteIds().isEmpty()) {
+            selectedRequisites = creatorRequisiteRepo.findAllById(req.getRequisiteIds());
+            if (selectedRequisites.size() != req.getRequisiteIds().size()) {
+                throw ApiException.badRequest("One or more requisite IDs are invalid");
+            }
+            for (uz.tabriko.domain.entity.CreatorRequisite requisite : selectedRequisites) {
+                if (!requisite.getCreatorUserId().equals(creator.getId())) {
+                    throw ApiException.badRequest("Requisite " + requisite.getId() + " does not belong to this creator");
+                }
+                if (requisite.getServiceType() != req.getType()) {
+                    throw ApiException.badRequest("Requisite " + requisite.getId() + " service type does not match order type");
+                }
+                if (requisite.getPrice() != null) {
+                    price = price.add(requisite.getPrice());
+                }
+            }
+        }
+
         Order order = new Order();
         order.setClient(client);
         order.setCreator(creator);
@@ -84,6 +105,7 @@ public class OrderService {
         order.setPrice(price);
         order.setStatus(OrderStatus.PENDING);
         order.setDeadline(deadline);
+        order.setRequisites(new java.util.ArrayList<>(selectedRequisites));
         orderRepo.save(order);
 
         // Hold payment immediately

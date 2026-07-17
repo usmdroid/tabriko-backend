@@ -7,6 +7,8 @@ import uz.tabriko.domain.enums.OrderType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Data
@@ -30,6 +32,7 @@ public class OrderResponse {
     private Instant createdAt;
     private String rejectionReason;
     private DeliveryResponse delivery;
+    private List<OrderRequisiteItem> requisites = new ArrayList<>();
     private boolean reviewed;
     private Integer reviewStars;
     private String reviewComment;

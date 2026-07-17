@@ -8,6 +8,7 @@ import uz.tabriko.domain.enums.CreatorTier;
 import uz.tabriko.domain.enums.OrderOption;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -100,6 +101,12 @@ public class CreatorProfile {
 
     @Column(name = "passport_number", length = 7)
     private String passportNumber;
+
+    @Column(name = "suspension_reason")
+    private String suspensionReason;
+
+    @Column(name = "suspended_at")
+    private Instant suspendedAt;
 
     // LAZY + batch fetching: avoids N+1 across lists of creators without breaking
     // pagination (unlike an @EntityGraph collection fetch, which forces in-memory

@@ -68,6 +68,8 @@ class AdminServiceTest {
     @Mock PushNotificationService pushService;
     @Mock MediaStorageService mediaStorageService;
     @Mock UserMapper mapper;
+    @Mock ModerationService moderationService;
+    @Mock CreatorModerationMessageRepository moderationRepo;
 
     @InjectMocks AdminService adminService;
 
@@ -490,6 +492,42 @@ class AdminServiceTest {
                 .hasMessageContaining("not found");
     }
 
+    @Test
+    void getCreatorDetail_zeroWarnings_returnsZeroActiveWarningCount() {
+        UUID creatorId = UUID.randomUUID();
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUser(clientUser);
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(cp));
+        when(portfolioRepo.findPublicWithConsent(creatorId)).thenReturn(List.of());
+        when(mapper.toCreatorResponseAdmin(eq(cp), anyList())).thenReturn(new CreatorResponse());
+        when(contactRepo.findByCreatorIdOrderByCreatedAtAsc(creatorId)).thenReturn(List.of());
+        when(mapper.toContactResponses(anyList())).thenReturn(List.of());
+        when(moderationRepo.countActiveWarnings(creatorId)).thenReturn(0L);
+
+        CreatorResponse result = adminService.getCreatorDetail(creatorId);
+
+        assertThat(result.getActiveWarningCount()).isZero();
+    }
+
+    @Test
+    void getCreatorDetail_multipleWarnings_returnsActiveWarningCount() {
+        UUID creatorId = UUID.randomUUID();
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUser(clientUser);
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(cp));
+        when(portfolioRepo.findPublicWithConsent(creatorId)).thenReturn(List.of());
+        when(mapper.toCreatorResponseAdmin(eq(cp), anyList())).thenReturn(new CreatorResponse());
+        when(contactRepo.findByCreatorIdOrderByCreatedAtAsc(creatorId)).thenReturn(List.of());
+        when(mapper.toContactResponses(anyList())).thenReturn(List.of());
+        when(moderationRepo.countActiveWarnings(creatorId)).thenReturn(3L);
+
+        CreatorResponse result = adminService.getCreatorDetail(creatorId);
+
+        assertThat(result.getActiveWarningCount()).isEqualTo(3);
+    }
+
     // ===== GET /admin/creators — getAllCreators returns contacts =====
 
     @Test
@@ -892,5 +930,143 @@ class AdminServiceTest {
 
         verify(mediaStorageService, never()).store(any(), any());
         verify(creatorProfileRepo, never()).save(any());
+    }
+
+    // ===== POST /admin/creators/{id}/suspend =====
+
+    @Test
+    void suspendCreator_existingCreator_setsStatusAndReason() {
+        UUID creatorId = UUID.randomUUID();
+        User creatorUser = new User();
+        creatorUser.setId(creatorId);
+        creatorUser.setStatus(UserStatus.ACTIVE);
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUser(creatorUser);
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(cp));
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(creatorProfileRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        adminService.suspendCreator(creatorId, "Inappropriate content");
+
+        assertThat(creatorUser.getStatus()).isEqualTo(UserStatus.SUSPENDED);
+        assertThat(cp.getSuspensionReason()).isEqualTo("Inappropriate content");
+        assertThat(cp.getSuspendedAt()).isNotNull();
+        verify(userRepo).save(creatorUser);
+        verify(creatorProfileRepo).save(cp);
+    }
+
+    @Test
+    void suspendCreator_notFound_throwsNotFound() {
+        when(creatorProfileRepo.findByUserId(any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminService.suspendCreator(UUID.randomUUID(), "reason"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not found");
+    }
+
+    // ===== POST /admin/creators/{id}/reactivate =====
+
+    @Test
+    void reactivateCreator_suspendedCreator_resetsStatusAndClearsReason() {
+        UUID creatorId = UUID.randomUUID();
+        User creatorUser = new User();
+        creatorUser.setId(creatorId);
+        creatorUser.setStatus(UserStatus.SUSPENDED);
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUser(creatorUser);
+        cp.setSuspensionReason("Old reason");
+        cp.setSuspendedAt(Instant.now().minusSeconds(3600));
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(cp));
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(creatorProfileRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        adminService.reactivateCreator(creatorId);
+
+        assertThat(creatorUser.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(cp.getSuspensionReason()).isNull();
+        assertThat(cp.getSuspendedAt()).isNull();
+        verify(userRepo).save(creatorUser);
+        verify(creatorProfileRepo).save(cp);
+    }
+
+    @Test
+    void reactivateCreator_notFound_throwsNotFound() {
+        when(creatorProfileRepo.findByUserId(any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminService.reactivateCreator(UUID.randomUUID()))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not found");
+    }
+
+    // ===== DELETE /admin/creators/{id}/avatar — deleteCreatorAvatar =====
+
+    @Test
+    void deleteCreatorAvatar_existingCreator_nullsAvatarAndSuspends() {
+        UUID creatorId = UUID.randomUUID();
+        User creatorUser = new User();
+        creatorUser.setId(creatorId);
+        creatorUser.setStatus(UserStatus.ACTIVE);
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUser(creatorUser);
+        cp.setAvatarUrl("http://example.com/avatar.jpg");
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(cp));
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(creatorProfileRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        adminService.deleteCreatorAvatar(creatorId, "Inappropriate avatar");
+
+        assertThat(cp.getAvatarUrl()).isNull();
+        assertThat(creatorUser.getStatus()).isEqualTo(UserStatus.SUSPENDED);
+        assertThat(cp.getSuspensionReason()).isEqualTo("Inappropriate avatar");
+        assertThat(cp.getSuspendedAt()).isNotNull();
+        verify(userRepo).save(creatorUser);
+        verify(creatorProfileRepo).save(cp);
+    }
+
+    @Test
+    void deleteCreatorAvatar_notFound_throwsNotFound() {
+        when(creatorProfileRepo.findByUserId(any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminService.deleteCreatorAvatar(UUID.randomUUID(), "reason"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not found");
+    }
+
+    // ===== DELETE /admin/creators/{id}/banner — deleteCreatorBanner =====
+
+    @Test
+    void deleteCreatorBanner_existingCreator_nullsBannerAndSuspends() {
+        UUID creatorId = UUID.randomUUID();
+        User creatorUser = new User();
+        creatorUser.setId(creatorId);
+        creatorUser.setStatus(UserStatus.ACTIVE);
+        CreatorProfile cp = new CreatorProfile();
+        cp.setUser(creatorUser);
+        cp.setBannerUrl("http://example.com/banner.jpg");
+
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(cp));
+        when(userRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(creatorProfileRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        adminService.deleteCreatorBanner(creatorId, "Inappropriate banner");
+
+        assertThat(cp.getBannerUrl()).isNull();
+        assertThat(creatorUser.getStatus()).isEqualTo(UserStatus.SUSPENDED);
+        assertThat(cp.getSuspensionReason()).isEqualTo("Inappropriate banner");
+        assertThat(cp.getSuspendedAt()).isNotNull();
+        verify(userRepo).save(creatorUser);
+        verify(creatorProfileRepo).save(cp);
+    }
+
+    @Test
+    void deleteCreatorBanner_notFound_throwsNotFound() {
+        when(creatorProfileRepo.findByUserId(any())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminService.deleteCreatorBanner(UUID.randomUUID(), "reason"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("not found");
     }
 }

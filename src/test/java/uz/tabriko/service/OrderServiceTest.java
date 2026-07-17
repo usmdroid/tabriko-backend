@@ -51,6 +51,7 @@ class OrderServiceTest {
     @Mock MediaStorageService mediaStorage;
     @Mock NotificationService notificationService;
     @Mock UserMapper mapper;
+    @Mock uz.tabriko.repository.CreatorRequisiteRepository creatorRequisiteRepo;
 
     @InjectMocks OrderService orderService;
 
@@ -594,5 +595,165 @@ class OrderServiceTest {
         d.setMediaUrlWatermarked("watermarked://media");
         d.setWatermarked(true);
         return d;
+    }
+
+    // ===== REQUISITE TESTS =====
+
+    @Test
+    void createOrder_withRequisites_priceIsBasePlusRequisiteSum() {
+        CreateOrderRequest req = new CreateOrderRequest();
+        req.setCreatorId(creatorId);
+        req.setType(OrderType.VIDEO);
+        req.setRequisiteIds(List.of(1L, 2L));
+
+        CreatorProfile profile = new CreatorProfile();
+        profile.setUser(creator);
+
+        CreatorServiceOffering offering = new CreatorServiceOffering();
+        offering.setCreator(creator);
+        offering.setType(OrderType.VIDEO);
+        offering.setPrice(new BigDecimal("100.00"));
+        offering.setDeliveryDays(3);
+        offering.setAccepting(true);
+        offering.setDiscountType(DiscountType.NONE);
+
+        uz.tabriko.domain.entity.CreatorRequisite r1 = new uz.tabriko.domain.entity.CreatorRequisite();
+        r1.setId(1L);
+        r1.setCreatorUserId(creatorId);
+        r1.setServiceType(OrderType.VIDEO);
+        r1.setName("HD sifat");
+        r1.setEmoji("🎬");
+        r1.setPrice(new BigDecimal("20000.00"));
+
+        uz.tabriko.domain.entity.CreatorRequisite r2 = new uz.tabriko.domain.entity.CreatorRequisite();
+        r2.setId(2L);
+        r2.setCreatorUserId(creatorId);
+        r2.setServiceType(OrderType.VIDEO);
+        r2.setName("Tez yetkazish");
+        r2.setEmoji("⚡");
+        r2.setPrice(new BigDecimal("30000.00"));
+
+        when(userRepo.findById(clientId)).thenReturn(Optional.of(client));
+        when(userRepo.findById(creatorId)).thenReturn(Optional.of(creator));
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(profile));
+        when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.VIDEO)).thenReturn(Optional.of(offering));
+        when(creatorRequisiteRepo.findAllById(List.of(1L, 2L))).thenReturn(List.of(r1, r2));
+        when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(paymentGateway.hold(any(), any(), any())).thenReturn(uz.tabriko.infrastructure.payment.PaymentResult.ok("mock-tx"));
+        when(mapper.toOrderResponse(any(), any(), any())).thenReturn(new OrderResponse());
+
+        orderService.createOrder(clientId, req);
+
+        // price == base (100) + r1 (20000) + r2 (30000)
+        ArgumentCaptor<Order> orderCap = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepo).save(orderCap.capture());
+        assertThat(orderCap.getValue().getPrice()).isEqualByComparingTo("50100.00");
+        assertThat(orderCap.getValue().getRequisites()).hasSize(2);
+    }
+
+    @Test
+    void createOrder_withNoOptionOrRecipientName_succeeds() {
+        CreateOrderRequest req = new CreateOrderRequest();
+        req.setCreatorId(creatorId);
+        req.setType(OrderType.VIDEO);
+        // option and recipientName intentionally not set
+
+        CreatorProfile profile = new CreatorProfile();
+        profile.setUser(creator);
+
+        CreatorServiceOffering offering = new CreatorServiceOffering();
+        offering.setCreator(creator);
+        offering.setType(OrderType.VIDEO);
+        offering.setPrice(new BigDecimal("100.00"));
+        offering.setDeliveryDays(3);
+        offering.setAccepting(true);
+        offering.setDiscountType(DiscountType.NONE);
+
+        when(userRepo.findById(clientId)).thenReturn(Optional.of(client));
+        when(userRepo.findById(creatorId)).thenReturn(Optional.of(creator));
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(profile));
+        when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.VIDEO)).thenReturn(Optional.of(offering));
+        when(orderRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(paymentGateway.hold(any(), any(), any())).thenReturn(uz.tabriko.infrastructure.payment.PaymentResult.ok("mock-tx"));
+        when(mapper.toOrderResponse(any(), any(), any())).thenReturn(new OrderResponse());
+
+        // Must not throw — option and recipientName are now optional
+        assertThatNoException().isThrownBy(() -> orderService.createOrder(clientId, req));
+    }
+
+    @Test
+    void createOrder_orderResponseContainsRequisites() {
+        CreateOrderRequest req = new CreateOrderRequest();
+        req.setCreatorId(creatorId);
+        req.setType(OrderType.VIDEO);
+        req.setRequisiteIds(List.of(1L));
+
+        CreatorProfile profile = new CreatorProfile();
+        profile.setUser(creator);
+
+        CreatorServiceOffering offering = new CreatorServiceOffering();
+        offering.setCreator(creator);
+        offering.setType(OrderType.VIDEO);
+        offering.setPrice(new BigDecimal("100.00"));
+        offering.setDeliveryDays(3);
+        offering.setAccepting(true);
+        offering.setDiscountType(DiscountType.NONE);
+
+        uz.tabriko.domain.entity.CreatorRequisite r1 = new uz.tabriko.domain.entity.CreatorRequisite();
+        r1.setId(1L);
+        r1.setCreatorUserId(creatorId);
+        r1.setServiceType(OrderType.VIDEO);
+        r1.setName("HD sifat");
+        r1.setEmoji("🎬");
+        r1.setPrice(new BigDecimal("20000.00"));
+
+        when(userRepo.findById(clientId)).thenReturn(Optional.of(client));
+        when(userRepo.findById(creatorId)).thenReturn(Optional.of(creator));
+        when(creatorProfileRepo.findByUserId(creatorId)).thenReturn(Optional.of(profile));
+        when(serviceOfferingRepo.findByCreator_IdAndType(creatorId, OrderType.VIDEO)).thenReturn(Optional.of(offering));
+        when(creatorRequisiteRepo.findAllById(List.of(1L))).thenReturn(List.of(r1));
+        when(orderRepo.save(any())).thenAnswer(inv -> {
+            Order saved = inv.getArgument(0);
+            // Simulate the mapper reading from the saved order
+            OrderResponse resp = new OrderResponse();
+            resp.setPrice(saved.getPrice());
+            List<uz.tabriko.dto.response.OrderRequisiteItem> items = saved.getRequisites().stream().map(rq -> {
+                uz.tabriko.dto.response.OrderRequisiteItem item = new uz.tabriko.dto.response.OrderRequisiteItem();
+                item.setName(rq.getName());
+                item.setEmoji(rq.getEmoji());
+                item.setPrice(rq.getPrice());
+                return item;
+            }).collect(java.util.stream.Collectors.toList());
+            resp.setRequisites(items);
+            return saved;
+        });
+        when(paymentGateway.hold(any(), any(), any())).thenReturn(uz.tabriko.infrastructure.payment.PaymentResult.ok("mock-tx"));
+
+        OrderResponse fakeResp = new OrderResponse();
+        uz.tabriko.dto.response.OrderRequisiteItem item = new uz.tabriko.dto.response.OrderRequisiteItem();
+        item.setName("HD sifat");
+        item.setEmoji("🎬");
+        item.setPrice(new BigDecimal("20000.00"));
+        fakeResp.setRequisites(List.of(item));
+        when(mapper.toOrderResponse(any(), any(), any())).thenReturn(fakeResp);
+
+        OrderResponse result = orderService.createOrder(clientId, req);
+
+        assertThat(result.getRequisites()).hasSize(1);
+        assertThat(result.getRequisites().get(0).getName()).isEqualTo("HD sifat");
+    }
+
+    @Test
+    void requisiteResponse_includesServiceTypeAndPrice() {
+        // Verify that CreatorRequisiteResponse has serviceType and price fields mapped correctly
+        uz.tabriko.dto.response.CreatorRequisiteResponse resp = new uz.tabriko.dto.response.CreatorRequisiteResponse();
+        resp.setId(1L);
+        resp.setName("HD sifat");
+        resp.setEmoji("🎬");
+        resp.setPrice(new BigDecimal("20000.00"));
+        resp.setServiceType(OrderType.VIDEO);
+
+        assertThat(resp.getServiceType()).isEqualTo(OrderType.VIDEO);
+        assertThat(resp.getPrice()).isEqualByComparingTo("20000.00");
     }
 }

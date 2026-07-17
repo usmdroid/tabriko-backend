@@ -1,5 +1,7 @@
 package uz.tabriko.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import uz.tabriko.domain.entity.*;
@@ -18,6 +20,7 @@ import java.util.stream.Collectors;
 @Component
 public class UserMapper {
 
+    private static final Logger log = LoggerFactory.getLogger(UserMapper.class);
     private static final long SIGNED_URL_TTL_SECONDS = 3600L;
 
     private String publicUrl(String rawUrl) {
@@ -161,6 +164,8 @@ public class UserMapper {
 
         r.setSocialTelegram(cp.getSocialTelegram());
         r.setSocialInstagram(cp.getSocialInstagram());
+
+        r.setSuspensionReason(cp.getSuspensionReason());
 
         List<String> missing = computeMissingItems(cp, portfolio);
         r.setMissing(missing);
@@ -334,6 +339,15 @@ public class UserMapper {
         if (delivery != null) {
             r.setDelivery(toDeliveryResponse(delivery, userId));
         }
+        if (o.getRequisites() != null && !o.getRequisites().isEmpty()) {
+            r.setRequisites(o.getRequisites().stream().map(req -> {
+                uz.tabriko.dto.response.OrderRequisiteItem item = new uz.tabriko.dto.response.OrderRequisiteItem();
+                item.setName(req.getName());
+                item.setEmoji(req.getEmoji());
+                item.setPrice(req.getPrice());
+                return item;
+            }).collect(java.util.stream.Collectors.toList()));
+        }
         return r;
     }
 
@@ -341,12 +355,14 @@ public class UserMapper {
         DeliveryResponse r = new DeliveryResponse();
         r.setId(d.getId());
         if (userId == null) {
-            throw new IllegalStateException("userId must not be null when a delivery is present");
+            log.warn("toDeliveryResponse called with null userId for delivery {}; mediaUrl will be null", d.getId());
+            r.setMediaUrl(null);
+        } else {
+            String rawUrl = d.getMediaUrlClean();
+            r.setMediaUrl(mediaStorage != null
+                ? mediaStorage.signedUrl(rawUrl, userId, SIGNED_URL_TTL_SECONDS)
+                : rawUrl);
         }
-        String rawUrl = d.getMediaUrlClean();
-        r.setMediaUrl(mediaStorage != null
-            ? mediaStorage.signedUrl(rawUrl, userId, SIGNED_URL_TTL_SECONDS)
-            : rawUrl);
         r.setWatermarked(false);
         r.setDeliveredAt(d.getDeliveredAt());
         return r;

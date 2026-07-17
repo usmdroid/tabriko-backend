@@ -9,6 +9,8 @@ import uz.tabriko.domain.enums.OrderType;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -34,7 +36,7 @@ public class Order {
     private OrderType type;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(length = 20)
     private OrderOption option;
 
     // Recipient info
@@ -76,4 +78,12 @@ public class Order {
 
     @Column(name = "seen_at")
     private Instant seenAt;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "order_requisites",
+        joinColumns = @JoinColumn(name = "order_id"),
+        inverseJoinColumns = @JoinColumn(name = "requisite_id")
+    )
+    private List<CreatorRequisite> requisites = new ArrayList<>();
 }

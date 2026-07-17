@@ -18,6 +18,7 @@ import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.entity.WalletTransaction;
 import uz.tabriko.domain.entity.UserDevice;
+import uz.tabriko.domain.enums.ModerationMessageKind;
 import uz.tabriko.domain.enums.NotificationType;
 import uz.tabriko.domain.enums.OrderStatus;
 import uz.tabriko.domain.enums.ReportStatus;
@@ -38,6 +39,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.security.SecureRandom;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +71,8 @@ public class AdminService {
     private final PushNotificationService pushService;
     private final MediaStorageService mediaStorageService;
     private final UserMapper mapper;
+    private final ModerationService moderationService;
+    private final CreatorModerationMessageRepository moderationRepo;
 
     @Transactional
     public CreatorResponse addCreator(AddCreatorRequest req) {
@@ -450,6 +454,58 @@ public class AdminService {
         return mapper.toCreatorResponseAdmin(cp, portfolioRepo.findPublicWithConsent(creatorId));
     }
 
+    // --- Creator suspension ---
+
+    @Transactional
+    public void suspendCreator(UUID creatorId, String reason) {
+        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
+                .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        cp.getUser().setStatus(UserStatus.SUSPENDED);
+        cp.setSuspensionReason(reason);
+        cp.setSuspendedAt(Instant.now());
+        userRepo.save(cp.getUser());
+        creatorProfileRepo.save(cp);
+        moderationService.appendSystemEntry(creatorId, ModerationMessageKind.SUSPENSION, reason);
+    }
+
+    @Transactional
+    public void reactivateCreator(UUID creatorId) {
+        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
+                .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        cp.getUser().setStatus(UserStatus.ACTIVE);
+        cp.setSuspensionReason(null);
+        cp.setSuspendedAt(null);
+        userRepo.save(cp.getUser());
+        creatorProfileRepo.save(cp);
+        moderationService.appendSystemEntry(creatorId, ModerationMessageKind.REACTIVATION, "Creator reactivated.");
+    }
+
+    @Transactional
+    public void deleteCreatorAvatar(UUID creatorId, String reason) {
+        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
+                .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        cp.setAvatarUrl(null);
+        cp.getUser().setStatus(UserStatus.SUSPENDED);
+        cp.setSuspensionReason(reason);
+        cp.setSuspendedAt(Instant.now());
+        userRepo.save(cp.getUser());
+        creatorProfileRepo.save(cp);
+        moderationService.appendSystemEntry(creatorId, ModerationMessageKind.SUSPENSION, reason);
+    }
+
+    @Transactional
+    public void deleteCreatorBanner(UUID creatorId, String reason) {
+        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
+                .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        cp.setBannerUrl(null);
+        cp.getUser().setStatus(UserStatus.SUSPENDED);
+        cp.setSuspensionReason(reason);
+        cp.setSuspendedAt(Instant.now());
+        userRepo.save(cp.getUser());
+        creatorProfileRepo.save(cp);
+        moderationService.appendSystemEntry(creatorId, ModerationMessageKind.SUSPENSION, reason);
+    }
+
     // --- Creator contacts ---
 
     @Transactional(readOnly = true)
@@ -467,6 +523,7 @@ public class AdminService {
             ri.setPrice(cr.getPrice());
             return ri;
         }).collect(Collectors.toList()));
+        r.setActiveWarningCount((int) moderationRepo.countActiveWarnings(creatorId));
         return r;
     }
 

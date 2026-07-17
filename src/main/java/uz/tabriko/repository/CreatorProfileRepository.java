@@ -27,6 +27,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
               AND (:search IS NULL OR LOWER(u.name) LIKE :searchPattern)
               AND cp.isVerified = true
               AND cp.profileComplete = true
+              AND cp.user.status = uz.tabriko.domain.enums.UserStatus.ACTIVE
             """,
             countQuery = """
             SELECT COUNT(cp) FROM CreatorProfile cp
@@ -35,6 +36,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
               AND (:search IS NULL OR LOWER(u.name) LIKE :searchPattern)
               AND cp.isVerified = true
               AND cp.profileComplete = true
+              AND cp.user.status = uz.tabriko.domain.enums.UserStatus.ACTIVE
             """)
     Page<CreatorProfile> findAllFiltered(
             @Param("categoryId") Long categoryId,
@@ -44,11 +46,13 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
     );
 
     @Query("SELECT cp FROM CreatorProfile cp JOIN FETCH cp.user LEFT JOIN FETCH cp.category " +
-           "WHERE cp.isTop = true AND cp.isVerified = true AND cp.profileComplete = true ORDER BY cp.avgRating DESC")
+           "WHERE cp.isTop = true AND cp.isVerified = true AND cp.profileComplete = true " +
+           "AND cp.user.status = uz.tabriko.domain.enums.UserStatus.ACTIVE ORDER BY cp.avgRating DESC")
     List<CreatorProfile> findTop10();
 
     @Query("SELECT cp FROM CreatorProfile cp JOIN FETCH cp.user LEFT JOIN FETCH cp.category " +
-           "WHERE cp.isVerified = true AND cp.profileComplete = true ORDER BY cp.ratingCount DESC")
+           "WHERE cp.isVerified = true AND cp.profileComplete = true " +
+           "AND cp.user.status = uz.tabriko.domain.enums.UserStatus.ACTIVE ORDER BY cp.ratingCount DESC")
     List<CreatorProfile> findForYou(Pageable pageable);
 
     Optional<CreatorProfile> findByUserId(UUID userId);
@@ -70,6 +74,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
             LEFT JOIN FETCH cp.category
             WHERE cp.isVerified = true
               AND cp.profileComplete = true
+              AND cp.user.status = uz.tabriko.domain.enums.UserStatus.ACTIVE
             ORDER BY (
               SELECT COUNT(o) FROM Order o
               WHERE o.creator = cp.user
@@ -79,6 +84,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
             countQuery = """
             SELECT COUNT(cp) FROM CreatorProfile cp
             WHERE cp.isVerified = true AND cp.profileComplete = true
+              AND cp.user.status = uz.tabriko.domain.enums.UserStatus.ACTIVE
             """)
     Page<CreatorProfile> findTrending(@Param("cutoff") Instant cutoff, Pageable pageable);
 
@@ -89,6 +95,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
             WHERE cp.id <> :excludeId
               AND cp.isVerified = true
               AND cp.profileComplete = true
+              AND cp.user.status = uz.tabriko.domain.enums.UserStatus.ACTIVE
               AND (cp.category = :category OR cp.tier = :tier)
             ORDER BY
               CASE WHEN cp.category = :category THEN 0 ELSE 1 END ASC,

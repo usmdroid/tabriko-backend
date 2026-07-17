@@ -51,6 +51,12 @@ public class CreatorSelfProfileResponse {
     private String socialTelegram;
     private String socialInstagram;
 
+    // Suspension info (null when not suspended)
+    private String suspensionReason;
+
+    // Moderation
+    private long activeWarningCount;
+
     // Completeness gate
     private boolean profileComplete;
     private List<String> missing;

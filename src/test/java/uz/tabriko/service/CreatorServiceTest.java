@@ -44,6 +44,7 @@ class CreatorServiceTest {
     @Mock OrderRepository orderRepo;
     @Mock DeliveryRepository deliveryRepo;
     @Mock CreatorServiceOfferingRepository serviceOfferingRepo;
+    @Mock uz.tabriko.repository.CreatorModerationMessageRepository moderationRepo;
     @Mock MediaStorageService mediaStorage;
     @Mock WalletService walletService;
     @Mock UserMapper mapper;
