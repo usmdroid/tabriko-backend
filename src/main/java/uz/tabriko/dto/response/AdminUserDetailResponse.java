@@ -15,6 +15,7 @@ public record AdminUserDetailResponse(
         String status,
         Instant createdAt,
         String accountNumber,
+        String avatarUrl,
         List<DeviceSummary> devices
 ) {
     public record DeviceSummary(

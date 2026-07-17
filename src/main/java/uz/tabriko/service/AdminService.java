@@ -112,7 +112,7 @@ public class AdminService {
         }
         creatorProfileRepo.save(cp);
 
-        return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(user.getId()));
+        return mapper.toCreatorResponseAdmin(cp, portfolioRepo.findPublicWithConsent(user.getId()));
     }
 
     @Transactional
@@ -121,7 +121,7 @@ public class AdminService {
                 .orElseThrow(() -> ApiException.notFound("Creator not found"));
         cp.setVerified(true);
         creatorProfileRepo.save(cp);
-        return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(creatorId));
+        return mapper.toCreatorResponseAdmin(cp, portfolioRepo.findPublicWithConsent(creatorId));
     }
 
     @Transactional(readOnly = true)
@@ -146,7 +146,7 @@ public class AdminService {
                         .collect(Collectors.groupingBy(CreatorContact::getCreatorId));
         return content.stream()
                 .map(cp -> {
-                    CreatorResponse r = mapper.toCreatorResponse(cp,
+                    CreatorResponse r = mapper.toCreatorResponseAdmin(cp,
                             portfolioByCreator.getOrDefault(cp.getUserId(), List.of()));
                     r.setContacts(mapper.toContactResponses(
                             contactsByCreator.getOrDefault(cp.getUserId(), List.of())));
@@ -160,7 +160,7 @@ public class AdminService {
     public PageResponse<OrderResponse> getAllOrders(int page, int size) {
         return PageResponse.of(
                 orderRepo.findAllByOrderByCreatedAtDesc(PageRequest.of(page, size)),
-                o -> mapper.toOrderResponse(o, null, null)
+                o -> mapper.toOrderResponseAdmin(o, null, null)
         );
     }
 
@@ -246,6 +246,7 @@ public class AdminService {
                         d.isBlocked()
                 ))
                 .collect(Collectors.toList());
+        String avatarUrl = mediaStorageService.publicUrl(user.getAvatarUrl());
         return new AdminUserDetailResponse(
                 user.getId(),
                 user.getName(),
@@ -256,6 +257,7 @@ public class AdminService {
                 user.getStatus().name(),
                 user.getCreatedAt(),
                 user.getAccountNumber(),
+                avatarUrl,
                 deviceSummaries
         );
     }
@@ -401,7 +403,7 @@ public class AdminService {
             default -> throw ApiException.badRequest("Invalid flag: " + flag + ". Allowed: top, exclusive");
         }
         creatorProfileRepo.save(cp);
-        return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(creatorId));
+        return mapper.toCreatorResponseAdmin(cp, portfolioRepo.findPublicWithConsent(creatorId));
     }
 
     // --- Creator avatar ---
@@ -425,7 +427,27 @@ public class AdminService {
         String url = mediaStorageService.store(file, "avatars");
         cp.setAvatarUrl(url);
         creatorProfileRepo.save(cp);
-        return mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(creatorId));
+        return mapper.toCreatorResponseAdmin(cp, portfolioRepo.findPublicWithConsent(creatorId));
+    }
+
+    @Transactional
+    public CreatorResponse uploadCreatorBanner(UUID creatorId, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw ApiException.badRequest("Banner file is required");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw ApiException.badRequest("Only image files are allowed");
+        }
+        if (file.getSize() > MAX_AVATAR_BYTES) {
+            throw ApiException.badRequest("File size must not exceed 5 MB");
+        }
+        CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
+                .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        String url = mediaStorageService.store(file, "banners");
+        cp.setBannerUrl(url);
+        creatorProfileRepo.save(cp);
+        return mapper.toCreatorResponseAdmin(cp, portfolioRepo.findPublicWithConsent(creatorId));
     }
 
     // --- Creator contacts ---
@@ -434,7 +456,7 @@ public class AdminService {
     public CreatorResponse getCreatorDetail(UUID creatorId) {
         CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
                 .orElseThrow(() -> ApiException.notFound("Creator not found"));
-        CreatorResponse r = mapper.toCreatorResponse(cp, portfolioRepo.findPublicWithConsent(creatorId));
+        CreatorResponse r = mapper.toCreatorResponseAdmin(cp, portfolioRepo.findPublicWithConsent(creatorId));
         r.setContacts(mapper.toContactResponses(contactRepo.findByCreatorIdOrderByCreatedAtAsc(creatorId)));
         List<CreatorRequisite> requisites = creatorRequisiteRepo.findByCreatorUserIdOrderByCreatedAtAsc(creatorId);
         r.setRequisites(requisites.stream().map(cr -> {

@@ -3,14 +3,18 @@ package uz.tabriko.service;
 import org.junit.jupiter.api.Test;
 import uz.tabriko.domain.entity.CreatorProfile;
 import uz.tabriko.domain.entity.CreatorServiceOffering;
+import uz.tabriko.domain.entity.Order;
 import uz.tabriko.domain.entity.PortfolioItem;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.enums.CreatorTier;
 import uz.tabriko.domain.enums.DiscountType;
+import uz.tabriko.domain.enums.OrderOption;
+import uz.tabriko.domain.enums.OrderStatus;
 import uz.tabriko.domain.enums.OrderType;
 import uz.tabriko.domain.enums.UserStatus;
 import uz.tabriko.dto.response.CreatorResponse;
 import uz.tabriko.dto.response.CreatorSelfProfileResponse;
+import uz.tabriko.dto.response.OrderResponse;
 import uz.tabriko.infrastructure.media.MediaStorageService;
 
 import java.lang.reflect.Field;
@@ -315,5 +319,60 @@ class UserMapperTest {
 
         assertThat(r.getAvatarUrl()).isNull();
         assertThat(r.getBannerUrl()).isNull();
+    }
+
+    // --- Phone stripping ---
+
+    private Order minimalOrder() {
+        User client = new User();
+        client.setId(UUID.randomUUID());
+        client.setPhone("+998901111111");
+        client.setName("Client");
+        client.setStatus(UserStatus.ACTIVE);
+
+        User creator = new User();
+        creator.setId(UUID.randomUUID());
+        creator.setPhone("+998902222222");
+        creator.setName("Creator");
+        creator.setStatus(UserStatus.ACTIVE);
+
+        Order o = new Order();
+        o.setClient(client);
+        o.setCreator(creator);
+        o.setType(OrderType.VIDEO);
+        o.setOption(OrderOption.SURPRISE);
+        o.setStatus(OrderStatus.PENDING);
+        o.setPrice(new BigDecimal("100.00"));
+        return o;
+    }
+
+    @Test
+    void toCreatorResponse_doesNotExposePhone() {
+        CreatorProfile cp = minimalProfile();
+        CreatorResponse r = mapper.toCreatorResponse(cp, List.of());
+        assertThat(r.getPhone()).isNull();
+    }
+
+    @Test
+    void toCreatorResponseAdmin_exposesPhone() {
+        CreatorProfile cp = minimalProfile();
+        CreatorResponse r = mapper.toCreatorResponseAdmin(cp, List.of());
+        assertThat(r.getPhone()).isEqualTo("+998901234567");
+    }
+
+    @Test
+    void toOrderResponse_doesNotExposePhones() {
+        Order o = minimalOrder();
+        OrderResponse r = mapper.toOrderResponse(o, null, null);
+        assertThat(r.getClientPhone()).isNull();
+        assertThat(r.getCreatorPhone()).isNull();
+    }
+
+    @Test
+    void toOrderResponseAdmin_exposesPhones() {
+        Order o = minimalOrder();
+        OrderResponse r = mapper.toOrderResponseAdmin(o, null, null);
+        assertThat(r.getClientPhone()).isEqualTo("+998901111111");
+        assertThat(r.getCreatorPhone()).isEqualTo("+998902222222");
     }
 }

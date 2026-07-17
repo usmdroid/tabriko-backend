@@ -458,7 +458,7 @@ class AdminServiceTest {
         CreatorResponse base = new CreatorResponse();
         base.setId(creatorId);
         base.setName("Star Creator");
-        when(mapper.toCreatorResponse(eq(cp), anyList())).thenReturn(base);
+        when(mapper.toCreatorResponseAdmin(eq(cp), anyList())).thenReturn(base);
 
         CreatorContact contact = new CreatorContact();
         contact.setId(UUID.randomUUID());
@@ -521,7 +521,7 @@ class AdminServiceTest {
 
         CreatorResponse base = new CreatorResponse();
         base.setId(creatorId);
-        when(mapper.toCreatorResponse(any(CreatorProfile.class), anyList())).thenReturn(base);
+        when(mapper.toCreatorResponseAdmin(any(CreatorProfile.class), anyList())).thenReturn(base);
 
         CreatorContactResponse contactResp = new CreatorContactResponse();
         contactResp.setId(contact.getId());
@@ -836,7 +836,7 @@ class AdminServiceTest {
         CreatorResponse expected = new CreatorResponse();
         expected.setId(creatorId);
         expected.setAvatarUrl("http://localhost:8080/files/avatars/img.jpg");
-        when(mapper.toCreatorResponse(any(CreatorProfile.class), anyList())).thenReturn(expected);
+        when(mapper.toCreatorResponseAdmin(any(CreatorProfile.class), anyList())).thenReturn(expected);
 
         MockMultipartFile file = new MockMultipartFile("file", "avatar.jpg",
                 MediaType.IMAGE_JPEG_VALUE, new byte[]{(byte) 0xFF, (byte) 0xD8});

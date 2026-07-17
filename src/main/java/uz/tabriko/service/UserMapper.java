@@ -65,11 +65,25 @@ public class UserMapper {
     }
 
     public CreatorResponse toCreatorResponse(CreatorProfile cp, List<PortfolioItem> portfolio) {
-        return toCreatorResponse(cp, portfolio, List.of());
+        return buildCreatorResponse(cp, portfolio, List.of(), false);
     }
 
     public CreatorResponse toCreatorResponse(CreatorProfile cp, List<PortfolioItem> portfolio,
                                               List<CreatorServiceOffering> services) {
+        return buildCreatorResponse(cp, portfolio, services, false);
+    }
+
+    public CreatorResponse toCreatorResponseAdmin(CreatorProfile cp, List<PortfolioItem> portfolio) {
+        return buildCreatorResponse(cp, portfolio, List.of(), true);
+    }
+
+    public CreatorResponse toCreatorResponseAdmin(CreatorProfile cp, List<PortfolioItem> portfolio,
+                                                   List<CreatorServiceOffering> services) {
+        return buildCreatorResponse(cp, portfolio, services, true);
+    }
+
+    private CreatorResponse buildCreatorResponse(CreatorProfile cp, List<PortfolioItem> portfolio,
+                                                  List<CreatorServiceOffering> services, boolean includePhone) {
         CreatorResponse r = new CreatorResponse();
         r.setId(cp.getUserId());
         r.setName(cp.getUser().getName());
@@ -90,7 +104,7 @@ public class UserMapper {
         r.setOptions(new java.util.HashSet<>(cp.getOptions()));
         applyServicePricing(services, r::setServices, r::setPriceFrom, r::setOriginalPriceFrom, r::setOnSale);
         r.setPortfolio(portfolio.stream().map(this::toPortfolioResponse).collect(Collectors.toList()));
-        r.setPhone(cp.getUser().getPhone());
+        r.setPhone(includePhone ? cp.getUser().getPhone() : null);
         r.setPublicCode(cp.getPublicCode());
         r.setStatus(cp.getUser().getStatus().name().toLowerCase());
         r.setCreatedAt(cp.getUser().getCreatedAt());
@@ -290,14 +304,22 @@ public class UserMapper {
     }
 
     public OrderResponse toOrderResponse(Order o, Delivery delivery, UUID userId) {
+        return buildOrderResponse(o, delivery, userId, false);
+    }
+
+    public OrderResponse toOrderResponseAdmin(Order o, Delivery delivery, UUID userId) {
+        return buildOrderResponse(o, delivery, userId, true);
+    }
+
+    private OrderResponse buildOrderResponse(Order o, Delivery delivery, UUID userId, boolean includePhone) {
         OrderResponse r = new OrderResponse();
         r.setId(o.getId());
         r.setClientId(o.getClient().getId());
         r.setClientName(o.getClient().getName());
-        r.setClientPhone(o.getClient().getPhone());
+        r.setClientPhone(includePhone ? o.getClient().getPhone() : null);
         r.setCreatorId(o.getCreator().getId());
         r.setCreatorName(o.getCreator().getName());
-        r.setCreatorPhone(o.getCreator().getPhone());
+        r.setCreatorPhone(includePhone ? o.getCreator().getPhone() : null);
         r.setType(o.getType());
         r.setOption(o.getOption());
         r.setRecipientName(o.getRecipientName());

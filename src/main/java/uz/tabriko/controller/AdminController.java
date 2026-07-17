@@ -224,6 +224,16 @@ public class AdminController {
         return ResponseEntity.ok(BaseResponse.ok(adminService.uploadCreatorAvatar(id, file)));
     }
 
+    @PostMapping(value = "/creators/{id}/banner", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload or replace a creator's banner image")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> uploadCreatorBanner(
+            @PathVariable UUID id,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.uploadCreatorBanner(id, file)));
+    }
+
     @PostMapping("/creators/{id}/flag")
     @Operation(summary = "Set a promotion flag on a creator (top or exclusive)")
     @PreAuthorize("hasRole('SUPERADMIN')")
