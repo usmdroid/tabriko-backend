@@ -8,6 +8,7 @@ import uz.tabriko.common.exception.ApiException;
 import uz.tabriko.domain.entity.PlatformSettingsEntity;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.entity.UserDevice;
+import uz.tabriko.common.util.PhoneHashUtil;
 import uz.tabriko.common.util.PhoneUtil;
 import uz.tabriko.domain.enums.Platform;
 import uz.tabriko.dto.request.UpdateProfileRequest;
@@ -82,6 +83,7 @@ public class UserService {
             throw ApiException.conflict("Bu telefon raqami boshqa hisobda ishlatilmoqda");
         }
         user.setPhone(newPhone);
+        user.setPhoneHash(PhoneHashUtil.hash(newPhone));
         return userMapper.toResponse(userRepo.save(user));
     }
 

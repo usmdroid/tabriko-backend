@@ -25,6 +25,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("SELECT u FROM User u WHERE u.id = :id")
     Optional<User> findByIdForUpdate(@Param("id") UUID id);
 
+    @Query("SELECT u FROM User u WHERE u.phoneHash IN :hashes AND u.birthDate IS NOT NULL AND u.id != :callerId")
+    List<User> findBirthdayMatches(@Param("hashes") List<String> hashes, @Param("callerId") UUID callerId);
+
     // Admin: list CLIENT users with optional name/phone search and status filter
     @Query("""
         SELECT u FROM User u

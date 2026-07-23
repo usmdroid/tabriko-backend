@@ -50,6 +50,9 @@ public class User {
     @Column(name = "birth_date")
     private LocalDate birthDate;
 
+    @Column(name = "phone_hash", length = 64)
+    private String phoneHash;
+
     @Column(name = "avatar_url", length = 500)
     private String avatarUrl;
 

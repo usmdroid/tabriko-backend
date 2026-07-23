@@ -6,6 +6,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.tabriko.common.exception.ApiException;
+import uz.tabriko.common.util.PhoneHashUtil;
 import uz.tabriko.common.util.PhoneUtil;
 import uz.tabriko.domain.entity.User;
 import uz.tabriko.domain.enums.Role;
@@ -62,6 +63,7 @@ public class AuthService {
         if (user == null) {
             user = new User();
             user.setPhone(phone);
+            user.setPhoneHash(PhoneHashUtil.hash(phone));
             if (req.getName() != null && !req.getName().isBlank()) user.setName(req.getName().trim());
             if (req.getEmail() != null && !req.getEmail().isBlank()) user.setEmail(req.getEmail().trim());
             if (req.getBirthDate() != null) user.setBirthDate(req.getBirthDate());
