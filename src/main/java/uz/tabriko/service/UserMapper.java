@@ -39,6 +39,7 @@ public class UserMapper {
         r.setRole(user.getRole());
         r.setStatus(user.getStatus());
         r.setBirthDate(user.getBirthDate());
+        r.setBirthdayVisible(user.isBirthdayVisible());
         r.setCreatedAt(user.getCreatedAt());
         r.setAccountNumber(user.getAccountNumber());
         r.setAvatar(publicUrl(user.getAvatarUrl()));

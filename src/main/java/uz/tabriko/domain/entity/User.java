@@ -50,6 +50,11 @@ public class User {
     @Column(name = "birth_date")
     private LocalDate birthDate;
 
+    // When false, the user opted out of sharing their birthday — they are
+    // excluded from contacts birthday matches.
+    @Column(name = "birthday_visible", nullable = false)
+    private boolean birthdayVisible = true;
+
     @Column(name = "phone_hash", length = 64)
     private String phoneHash;
 

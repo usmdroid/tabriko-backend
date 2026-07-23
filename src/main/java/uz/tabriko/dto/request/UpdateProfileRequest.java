@@ -15,4 +15,8 @@ public class UpdateProfileRequest {
     private String email;
 
     private LocalDate birthDate;
+
+    // null = no change; true/false toggles whether the birthday is shared in
+    // contacts birthday matches.
+    private Boolean birthdayVisible;
 }

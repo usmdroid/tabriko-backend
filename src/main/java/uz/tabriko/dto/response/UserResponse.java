@@ -17,6 +17,7 @@ public class UserResponse {
     private Role role;
     private UserStatus status;
     private LocalDate birthDate;
+    private boolean birthdayVisible;
     private Instant createdAt;
     private String accountNumber;
     private String avatar;

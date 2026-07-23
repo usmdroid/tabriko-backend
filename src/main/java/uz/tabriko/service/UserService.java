@@ -47,6 +47,7 @@ public class UserService {
         if (req.getEmail() != null) user.setEmail(req.getEmail());
         // null birthDate means "no change"; clients must send the field explicitly to update it
         if (req.getBirthDate() != null) user.setBirthDate(req.getBirthDate());
+        if (req.getBirthdayVisible() != null) user.setBirthdayVisible(req.getBirthdayVisible());
         return userMapper.toResponse(userRepo.save(user));
     }
 
