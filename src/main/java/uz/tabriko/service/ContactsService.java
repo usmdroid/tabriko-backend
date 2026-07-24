@@ -42,6 +42,7 @@ public class ContactsService {
     private BirthdayMatchResponse toResponse(User u, Map<UUID, CreatorProfile> cpMap) {
         BirthdayMatchResponse r = new BirthdayMatchResponse();
         r.setUserId(u.getId());
+        r.setHash(u.getPhoneHash());
         r.setName(u.getName());
         r.setAvatarUrl(mediaStorage.publicUrl(u.getAvatarUrl()));
         r.setBirthDay(u.getBirthDate().getDayOfMonth());

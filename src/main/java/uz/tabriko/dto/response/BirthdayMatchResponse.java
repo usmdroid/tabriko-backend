@@ -9,6 +9,9 @@ import java.util.UUID;
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public class BirthdayMatchResponse {
     private UUID userId;
+    // Echo of the matched phone hash the client sent — lets the app map this
+    // result back to the device contact (to show the local contact name).
+    private String hash;
     private String name;
     private String avatarUrl;
     private int birthDay;
