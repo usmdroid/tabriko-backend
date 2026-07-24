@@ -110,6 +110,7 @@ public class CatalogService {
     public CreatorResponse getCreator(UUID creatorId) {
         CreatorProfile cp = creatorProfileRepo.findByUserId(creatorId)
                 .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        requireActive(cp);
         return buildFullCreatorResponse(cp);
     }
 
@@ -117,7 +118,16 @@ public class CatalogService {
     public CreatorResponse getCreatorByCode(String code) {
         CreatorProfile cp = creatorProfileRepo.findByPublicCode(code)
                 .orElseThrow(() -> ApiException.notFound("Creator not found"));
+        requireActive(cp);
         return buildFullCreatorResponse(cp);
+    }
+
+    // Archived/deleted (or otherwise non-active) creators are not viewable in
+    // the app — surface a 404 rather than their profile.
+    private void requireActive(CreatorProfile cp) {
+        if (cp.getUser().getStatus() != uz.tabriko.domain.enums.UserStatus.ACTIVE) {
+            throw ApiException.notFound("Creator not found");
+        }
     }
 
     private CreatorResponse buildFullCreatorResponse(CreatorProfile cp) {

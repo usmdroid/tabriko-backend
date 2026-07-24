@@ -20,6 +20,7 @@ import uz.tabriko.dto.request.AdminPromotionRequest;
 import uz.tabriko.dto.request.AdminRequisiteRequest;
 import uz.tabriko.dto.request.AdminSendModerationRequest;
 import uz.tabriko.dto.request.BroadcastNotificationRequest;
+import uz.tabriko.dto.request.DeleteAccountRequest;
 import uz.tabriko.dto.request.FlagCreatorRequest;
 import uz.tabriko.dto.request.PatchRequisiteRequest;
 import uz.tabriko.dto.request.SuspendCreatorRequest;
@@ -333,6 +334,47 @@ public class AdminController {
     public ResponseEntity<BaseResponse<?>> unblockUser(@PathVariable UUID id) {
         adminService.unblockUser(id);
         return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    // --- Account lifecycle: archive / delete / restore (SUPERADMIN only) ---
+    // Works for both CLIENT users and CREATOR accounts (keyed by user id).
+
+    @PostMapping("/accounts/{id}/archive")
+    @Operation(summary = "Archive an account (hidden from the app, kept in storage)")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> archiveAccount(
+            @PathVariable UUID id,
+            @RequestBody(required = false) SuspendCreatorRequest req
+    ) {
+        adminService.archiveAccount(id, req != null ? req.getReason() : null);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    @PostMapping("/accounts/{id}/restore")
+    @Operation(summary = "Restore an archived/soft-deleted account to active")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> restoreAccount(@PathVariable UUID id) {
+        adminService.restoreAccount(id);
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    @PostMapping("/accounts/{id}/delete")
+    @Operation(summary = "Soft-delete an account (only after archiving) with a reason")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> deleteAccount(
+            @PathVariable UUID id,
+            @Valid @RequestBody DeleteAccountRequest req,
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        adminService.deleteAccount(id, req.getReason(), principal.getUserId());
+        return ResponseEntity.ok(BaseResponse.ok());
+    }
+
+    @GetMapping("/deleted-accounts")
+    @Operation(summary = "List soft-deleted accounts (audit: when / who / why)")
+    @PreAuthorize("hasRole('SUPERADMIN')")
+    public ResponseEntity<BaseResponse<?>> listDeletedAccounts() {
+        return ResponseEntity.ok(BaseResponse.ok(adminService.getDeletedAccounts()));
     }
 
     @GetMapping("/users/{id}")

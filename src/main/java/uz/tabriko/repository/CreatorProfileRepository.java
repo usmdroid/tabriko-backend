@@ -64,8 +64,10 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
     @Query("SELECT COUNT(cp) FROM CreatorProfile cp WHERE cp.isVerified = true AND cp.profileComplete = true AND cp.user.status = :activeStatus")
     long countActiveCreators(@Param("activeStatus") UserStatus activeStatus);
 
-    @Query(value = "SELECT cp FROM CreatorProfile cp JOIN FETCH cp.user LEFT JOIN FETCH cp.category",
-            countQuery = "SELECT COUNT(cp) FROM CreatorProfile cp")
+    @Query(value = "SELECT cp FROM CreatorProfile cp JOIN FETCH cp.user LEFT JOIN FETCH cp.category "
+            + "WHERE cp.user.status <> uz.tabriko.domain.enums.UserStatus.DELETED",
+            countQuery = "SELECT COUNT(cp) FROM CreatorProfile cp "
+                    + "WHERE cp.user.status <> uz.tabriko.domain.enums.UserStatus.DELETED")
     Page<CreatorProfile> findAllWithUser(Pageable pageable);
 
     @Query(value = """

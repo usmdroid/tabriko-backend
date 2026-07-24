@@ -34,6 +34,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
         WHERE u.role = uz.tabriko.domain.enums.Role.CLIENT
           AND (:search IS NULL OR LOWER(u.name) LIKE :searchPattern OR u.phone LIKE :searchPattern)
           AND (:status IS NULL OR u.status = :status)
+          AND (:status IS NOT NULL OR u.status <> uz.tabriko.domain.enums.UserStatus.DELETED)
         ORDER BY u.createdAt DESC
         """)
     List<User> findClientsFiltered(
@@ -41,4 +42,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
         @Param("searchPattern") String searchPattern,
         @Param("status") UserStatus status
     );
+
+    // Admin "deleted accounts" tab — all roles, newest deletion first.
+    List<User> findByStatusOrderByDeletedAtDesc(UserStatus status);
 }

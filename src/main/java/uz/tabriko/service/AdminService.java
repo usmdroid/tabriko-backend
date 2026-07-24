@@ -211,6 +211,66 @@ public class AdminService {
         userRepo.save(user);
     }
 
+    // --- Account lifecycle: archive / soft-delete / restore (SUPERADMIN) ---
+
+    // Archive: hide from the app (feeds/search/direct fetch) but keep in storage.
+    @Transactional
+    public void archiveAccount(UUID id, String reason) {
+        User user = userRepo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("User not found"));
+        if (user.getStatus() == UserStatus.DELETED) {
+            throw ApiException.badRequest("Account is already deleted");
+        }
+        user.setStatus(UserStatus.ARCHIVED);
+        user.setArchivedAt(Instant.now());
+        user.setArchiveReason(reason);
+        userRepo.save(user);
+    }
+
+    // Restore an archived (or soft-deleted, still-present) account to ACTIVE.
+    @Transactional
+    public void restoreAccount(UUID id) {
+        User user = userRepo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("User not found"));
+        user.setStatus(UserStatus.ACTIVE);
+        user.setArchivedAt(null);
+        user.setArchiveReason(null);
+        user.setDeletedAt(null);
+        user.setDeletionReason(null);
+        user.setDeletedBy(null);
+        userRepo.save(user);
+    }
+
+    // Soft-delete: only allowed after archiving. Records reason + admin + time.
+    // The row is kept (restorable); a future scheduled job will hard-purge.
+    @Transactional
+    public void deleteAccount(UUID id, String reason, UUID adminId) {
+        User user = userRepo.findById(id)
+                .orElseThrow(() -> ApiException.notFound("User not found"));
+        if (user.getStatus() != UserStatus.ARCHIVED) {
+            throw ApiException.badRequest("Account must be archived before it can be deleted");
+        }
+        user.setStatus(UserStatus.DELETED);
+        user.setDeletedAt(Instant.now());
+        user.setDeletionReason(reason);
+        user.setDeletedBy(adminId);
+        userRepo.save(user);
+    }
+
+    @Transactional(readOnly = true)
+    public List<DeletedAccountResponse> getDeletedAccounts() {
+        return userRepo.findByStatusOrderByDeletedAtDesc(UserStatus.DELETED).stream()
+                .map(u -> {
+                    String adminName = u.getDeletedBy() == null ? null
+                            : userRepo.findById(u.getDeletedBy()).map(User::getName).orElse(null);
+                    return new DeletedAccountResponse(
+                            u.getId(), u.getName(), u.getPhone(),
+                            u.getRole() != null ? u.getRole().name() : null,
+                            u.getDeletedAt(), u.getDeletionReason(), adminName);
+                })
+                .collect(Collectors.toList());
+    }
+
     @Transactional
     public void blockDevice(String deviceId) {
         List<UserDevice> devices = userDeviceRepo.findAllByDeviceId(deviceId);

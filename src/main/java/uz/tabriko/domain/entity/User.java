@@ -63,4 +63,21 @@ public class User {
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
+
+    // --- Account lifecycle (archive / soft-delete) ---
+    @Column(name = "archived_at")
+    private Instant archivedAt;
+
+    @Column(name = "archive_reason", length = 500)
+    private String archiveReason;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    @Column(name = "deletion_reason", length = 500)
+    private String deletionReason;
+
+    // The admin (user id) who deleted this account.
+    @Column(name = "deleted_by")
+    private UUID deletedBy;
 }
